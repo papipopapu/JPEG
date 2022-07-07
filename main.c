@@ -14,13 +14,22 @@ int main() {
         85, 71, 64, 59, 55, 61, 65, 83,
         87, 79, 69, 68, 65, 76, 78, 94
     };
+
+    u_int8_t max_block[64];
+    max_block[0] = 0;
+    for (int k=1; k<64; k++) {
+        max_block[k] = max_block[k-1] + 1;
+    }
+
+    int16_t h[64];
     u_int8_t aprox_block[n*m];
-    get_block(uint8_block, aprox_block, 8, 8, 8, 0, 0);
+    get_block(max_block, aprox_block, 8, 8, 8, 0, 0);
 
 
     DATA_NODE* head = new_DATA_NODE();
-    block_process_one(true, uint8_block, 8, head);
+    block_process_one(true, aprox_block, 8, head);
     free_DATA_NODE_list(head);
+
 
 
     return 0;

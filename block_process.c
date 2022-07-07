@@ -43,7 +43,7 @@ void get_block(u_int8_t *IMAGE, u_int8_t *UINT8_BLOCK, size_t BLOCK_SIZE, size_t
         }
     }
 }
-void bloc_rgb_to_yCbCr(u_int8_t *r_to_y, u_int8_t *g_to_Cb, u_int8_t *b_to_Cr, size_t BLOCK_DIM)
+void block_rgb_to_yCbCr(u_int8_t *r_to_y, u_int8_t *g_to_Cb, u_int8_t *b_to_Cr, size_t BLOCK_DIM)
 {
     /*
     Translates rgb values to yCbCr values.
@@ -63,6 +63,26 @@ void bloc_rgb_to_yCbCr(u_int8_t *r_to_y, u_int8_t *g_to_Cb, u_int8_t *b_to_Cr, s
         b_to_Cr[i] = (R * 0.5 + G * -0.418688 + B * -0.081312 + 128);
    }
 }
+void block_yCbCt_to_rgb(u_int8_t *y_to_r, u_int8_t *Cb_to_g, u_int8_t *Cr_to_b, size_t BLOCK_DIM)
+{
+    /*
+    Translates yCbCr values to rgb values.
+        * y_to_r: the block containing y values, and output for r.
+        * Cb_to_g: the block containing Cb values, and output for g.
+        * Cr_to_b: the block containing Cr values, and output for b.
+        * BLOCK_DIM: the size of the block.
+    */
+   int i;
+   u_int8_t Y, Cb, Cr;
+   for (i = 0; i < BLOCK_DIM * BLOCK_DIM; i++) {
+        Y = y_to_r[i];
+        Cb = Cb_to_g[i];
+        Cr = Cr_to_b[i];
+        y_to_r[i] = (Y + 1.402 * (Cr - 128));
+        Cb_to_g[i] = (Y - 0.344136 * (Cb - 128) - 0.714136 * (Cr - 128));
+        Cr_to_b[i] = (Y + 1.772 * (Cb - 128));
+   }
+}
 void block_downsample420(u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM)
 {
     /*
@@ -80,8 +100,8 @@ void block_dct(u_int8_t *UINT8_BLOCK, float *FLOAT_BLOCK, size_t BLOCK_DIM) {
     /*
     Obtains the discrete cosine transform of the given BLOCK of pixeks, into the FLOAT_BLOCK, both of size BLOCK_DIM * BLOCK_DIM.
     Args:
-        * UINT8_BLOCK: input block, its a pointer to an isolated chunk of memory outside the original image.
-        * FLOAT_BLOCK: output block, its a pointer to an isolated chunk of memory outside the original image. 
+        * UINT8_BLOCK: input block
+        * FLOAT_BLOCK: output block, icontains dct transformation
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.     
           
     */
@@ -102,12 +122,12 @@ void block_dct(u_int8_t *UINT8_BLOCK, float *FLOAT_BLOCK, size_t BLOCK_DIM) {
     }
 }
 
-void block_idct(float *FLOAT_BLOCK, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM)
+void block_inv_dct(u_int8_t *UINT8_BLOCK, float *FLOAT_BLOCK, size_t BLOCK_DIM) 
 {
     /*
     Obtains the inversse discrete cosine transform of the given BLOCK of pixeks, into the FLOAT_BLOCK, both of size BLOCK_DIM * BLOCK_DIM.
     Args:
-        * UINT8_BLOCK: output block, its a pointer to an isolated chunk of memory outside the original image.
+        * UINT8_BLOCK: output block
         * FLOAT_BLOCK: inùt block, contains the dct transform 
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.     
           
@@ -134,9 +154,9 @@ void general_dct(u_int8_t *UINT8_BLOCK, float *FLOAT_BLOCK, size_t BLOCK_WIDTH, 
     Obtains the discrete cosine transform of the given chunk of pixeks, into the FLOAT_BLOCK.
     Used when a whole BLOCK does not fit, here only part of the BLOCK varaible's memory will be used.
     Args:
-        * UINT8_BLOCK: input block, its a pointer to an isolated chunk of memory outside the original image. 
+        * UINT8_BLOCK: input block
                            The block is assumed to be of size BLOCK_WIDTH * BLOCK_HEIGHT.
-        * FLOAT_BLOCK: output block, its a pointer to an isolated chunk of memory outside the original image.
+        * FLOAT_BLOCK: output block
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.     
     */
     int i, j, k, l;
@@ -161,8 +181,8 @@ void block_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLOAT_B
     Quantizies the FLOAT_BLOCK after a discrete cosine transform using the QUANT_MAT.
     Args:
         * QUANT_MAT: quantization matrix
-        * INT16_BLOCK: output block, its a pointer to an isolated chunk of memory outside image of int8 type
-        * FLOAT_BLOCK: input block, its a pointer to an isolated chunk of memory outside image of float type
+        * INT16_BLOCK: output block
+        * FLOAT_BLOCK: input block
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
     int i;
@@ -171,56 +191,47 @@ void block_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLOAT_B
     }
 }
 
-void block_zigzag(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, size_t BLOCK_DIM) {
+void block_inv_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLOAT_BLOCK, size_t BLOCK_DIM) {
     /*
-    Reorders the INT8_BLOCK  into INT16_SEQUENCE after a quantization.
+    Obtains the inverse quantization of the INT16_BLOCK using the QUANT_MAT.
     Args:
-        * INT16_SEQUENCE: output block, its a pointer to an isolated chunk of memory outside image 
-        * INT16_BLOCK: output block, its a pointer to an isolated chunk of memory outside image 
+        * QUANT_MAT: quantization matrix
+        * FLOAT_BLOCK: output block 
+        * INT16_BLOCK: input block
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
-    int i = 0, j = 0, p = 0;
-    INT16_SEQUENCE[p++] = INT16_BLOCK[i * BLOCK_DIM + j];
-    while (p < BLOCK_DIM * BLOCK_DIM)
-	{
-		if (j < BLOCK_DIM - 1)
-		{
-			j++;
-		}
-		else
-		{
-			i++;
-		}
-
-		while (i < BLOCK_DIM && j >= 0)
-		{
-			INT16_SEQUENCE[p++] = INT16_BLOCK[i * BLOCK_DIM + j];
-			i++;
-			j--;
-		}
-		i--;
-		j++;
-
-		if (i < BLOCK_DIM - 1)
-		{
-			i++;
-		}
-		else
-		{
-			j++;
-		}
-
-		while (i >= 0 && j < BLOCK_DIM)
-		{
-			INT16_SEQUENCE[p++] = INT16_BLOCK[i * BLOCK_DIM + j];
-			i--;
-			j++;
-		}
-		i++;
-		j--;
-	}
+    int i;
+    for (i = 0; i < BLOCK_DIM * BLOCK_DIM; i++) {  
+        FLOAT_BLOCK[i] = INT16_BLOCK[i] * QUANT_MAT[i];  
+    }
 }
 
+void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, size_t BLOCK_DIM, const u_int8_t *SERIAL_IDX) {
+    /*
+    Reorders the INT8_BLOCK into INT16_SEQUENCE after a quantization.
+    Args:
+        * INT16_SEQUENCE: output block
+        * INT16_BLOCK: input block
+        * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
+    */
+    for (int i = 0; i < BLOCK_DIM * BLOCK_DIM; i++) {
+        INT16_SEQUENCE[i] = INT16_BLOCK[SERIAL_IDX[i]];
+    }
+}
+
+
+void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, size_t BLOCK_DIM, const u_int8_t *SERIAL_IDX) {
+    /*
+    Undoes the serialize reordering of the INT16_SEQUENCE into the INT16_BLOCK.
+    Args:
+        * INT16_SEQUENCE: input block
+        * INT16_BLOCK: output block
+        * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
+    */
+    for (int i = 0; i < BLOCK_DIM * BLOCK_DIM; i++) {
+        INT16_SEQUENCE[i] = INT16_BLOCK[SERIAL_IDX[BLOCK_DIM * BLOCK_DIM - i - 1]];
+    }
+}
 u_int8_t min_bits_abs(int16_t n) {
     // min bits to hold the abolute value of int16 //
     int i;
@@ -234,36 +245,60 @@ u_int8_t min_bits_abs(int16_t n) {
 }
 
 
-void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE *PACKED_BLOCK_HEAD, size_t BLOCK_DIM) {
+void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE *PACKED_BLOCKS_HEAD, size_t BLOCK_DIM, size_t BLOCK_NUMBER, size_t *TOTAL_BITSIZE) {
     /*
-    Packs the data from the sequence into a linked list of structs. 
+    Packs the data from the swhole image sequence into a linked list of structs. 
     Args:
-        * INT16_SEQUENCE: sequence of ints.
+        * INT16_SEQUENCE: sequence of ints for whole image (until EOB).
         * PACKED_BLOCK_HEAD: pointer to the head of a linked list of PACKED_NODEs.
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
     int i;
-    u_int8_t zeros = 0;
-    int16_t val; 
-     // DC component
-    DATA_NODE *prev = PACKED_BLOCK_HEAD, *next = NULL;
-    pack_DATA_NODE(prev, 0, INT16_SEQUENCE[0]);
+    u_int8_t zeros = 0, val_size;
+    *TOTAL_BITSIZE = 32; // 32 first bits are reserved for image dimensions 16bits x 16bits
+    int16_t val, prev_DC, temp; 
+     // first DC component
+    DATA_NODE *prev = PACKED_BLOCKS_HEAD, *next = NULL;
+    prev_DC = INT16_SEQUENCE[0];
+    pack_DATA_NODE(prev, 0, prev_DC, TOTAL_BITSIZE); 
+   
 
-    for (i = 1; i < BLOCK_DIM * BLOCK_DIM - 1; i++) { // AC components
+    for (i = 1; i < BLOCK_DIM * BLOCK_DIM * BLOCK_NUMBER - 1; i++) { 
         val = INT16_SEQUENCE[i];
+        if (i%(BLOCK_DIM * BLOCK_DIM) == 0) { // DC component
+            temp = val; val -= prev_DC; prev_DC = temp; // prediction
+            next = new_DATA_NODE();
+            pack_DATA_NODE(next, zeros, val, TOTAL_BITSIZE);
+            prev -> next = next;
+            prev = next;
+            zeros = 0;
+        }
+        
         if (val == 0 && zeros < 15) {
             zeros++; 
         } else {
-            next = new_DATA_NODE();
-            pack_DATA_NODE(next, zeros, val);
+            next = new_DATA_NODE(); // normal AC 
+            pack_DATA_NODE(next, zeros, val, TOTAL_BITSIZE);
             prev -> next = next;
             prev = next;
             zeros = 0;
         }   
     }
     next = new_DATA_NODE(); // AC at the end
-    pack_DATA_NODE(next, zeros, 0);
+    pack_DATA_NODE(next, zeros, 0, TOTAL_BITSIZE);
     prev -> next = next;
+    prev = next;
+    
+
+    /*maybe we dont need eob
+    next = new_DATA_NODE(); // EOB
+    pack_DATA_NODE(next, 0, 0, TOTAL_BITSIZE);
+    prev -> next = next;
+    */
+    // size = 0 -> val = 0
+    // (15, 0) (0) is the usual compressed token
+    // (0, 0) (0) EOB collides with the unlikely scenario of an ending 0 preceded by a filled AC, but when decompressing, we gon be
+    // keeping track of the dimensions of the original image, so we can know when to stop (i.e. stop = all data read && EOB reached, else throw ERROR)
 }
 
 //////////////////////////
@@ -342,6 +377,7 @@ void print_list(DATA_NODE* head)
 /////////////////////////////
 void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_NODE *PACKED_BLOCK_HEAD)
 {
+    size_t TOTAL_BITSIZE;
     ////////////////////////////////////////////////////////////////////////////////////////////////
     printf("\nInitial block:\n");
     print_ui8(UINT8_BLOCK, BLOCK_DIM, BLOCK_DIM);
@@ -362,7 +398,7 @@ void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_N
     print_f(FLOAT_BLOCK, BLOCK_DIM, BLOCK_DIM);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // inverse DCT
-    block_idct(FLOAT_BLOCK, UINT8_BLOCK, BLOCK_DIM);
+    block_inv_dct(UINT8_BLOCK, FLOAT_BLOCK, BLOCK_DIM);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     printf("\nReconstructed after idct:\n");
     print_ui8(UINT8_BLOCK, BLOCK_DIM, BLOCK_DIM);
@@ -375,30 +411,38 @@ void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_N
     } else {
         block_quantize(CHROMINANCE_QUANT_MATRIX_8_8, INT16_BLOCK, FLOAT_BLOCK, BLOCK_DIM);
     }
-    block_quantize(LUMINANCE_QUANT_MATRIX_8_8, INT16_BLOCK, FLOAT_BLOCK, BLOCK_DIM);
+    block_quantize(CHROMINANCE_QUANT_MATRIX_8_8, INT16_BLOCK, FLOAT_BLOCK, BLOCK_DIM);
     free(FLOAT_BLOCK);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     printf("\nQuantized:\n");
     print_i16(INT16_BLOCK, BLOCK_DIM, BLOCK_DIM);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     
-    // Zigzag
+    // serialize
     int16_t *INT16_SEQUENCE = malloc(sizeof(int16_t) * BLOCK_DIM * BLOCK_DIM);
-    block_zigzag(INT16_BLOCK, INT16_SEQUENCE, BLOCK_DIM);
-    free(INT16_BLOCK);
+    block_serialize(INT16_BLOCK, INT16_SEQUENCE, BLOCK_DIM, ZIGZAG_IDX_8_8);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     printf("\nSequenced:\n");
     print_i16(INT16_SEQUENCE, BLOCK_DIM, BLOCK_DIM);
     ////////////////////////////////////////////////////////////////////////////////////////////////
+     // Inverse serialize
+    block_inv_serialize(INT16_BLOCK, INT16_SEQUENCE, BLOCK_DIM, ZIGZAG_IDX_8_8);
     
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    printf("\n De-sequenced:\n");
+    print_i16(INT16_BLOCK, BLOCK_DIM, BLOCK_DIM);
+    block_serialize(INT16_BLOCK, INT16_SEQUENCE, BLOCK_DIM, ZIGZAG_IDX_8_8);
+    free(INT16_BLOCK);
+    ////////////////////////////////////////////////////////////////////////////////////////////////
     // Pack
-    block_pack(INT16_SEQUENCE, PACKED_BLOCK_HEAD, BLOCK_DIM);
+    blocks_pack(INT16_SEQUENCE, PACKED_BLOCK_HEAD, BLOCK_DIM, 1, &TOTAL_BITSIZE);
     free(INT16_SEQUENCE);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     printf("\nPacked list:\n");
     print_list(PACKED_BLOCK_HEAD);
     ////////////////////////////////////////////////////////////////////////////////////////////////
+    printf("\nPrevious size: 512, new size: %ld\n", TOTAL_BITSIZE);
 }
 
-// {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> zigzag_reorder -> {int8_sequence} -> huffman -> {huffman}
+// {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
 
