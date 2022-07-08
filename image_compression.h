@@ -22,6 +22,7 @@ typedef struct DATA_NODE {
     struct DATA_NODE *next; // next pack
 } DATA_NODE;
 
+
 DATA_NODE *new_DATA_NODE();
 void free_DATA_NODE_list(DATA_NODE* head);
 void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL);
@@ -48,9 +49,11 @@ void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, size_t B
 
 u_int8_t min_bits_abs(int16_t n);
 void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, size_t BLOCK_NUMBER);
-void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, u_int8_t *DRAGGED_ZEROS, int8_t TYPE);
+void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, bool IS_FIRST);
 void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_NODE **AC_HEAD, DATA_NODE **DC_HEAD);
 
-// {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
+void blocks_encode(FILE* file, DATA_NODE *AC_DATA_NODES, DATA_NODE *DC_DATA_NODES, int16_t IMG_WIDTH, int16_t IMG_HEIGHT);
 
+// {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
+// 16 one bits + img width(16 bits) + img height(16 bits) + 16 one bits + dc codes
 #endif
