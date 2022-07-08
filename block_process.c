@@ -245,49 +245,42 @@ u_int8_t min_bits_abs(int16_t n) {
 }
 
 
-void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE *PACKED_BLOCKS_HEAD, size_t BLOCK_DIM, size_t BLOCK_NUMBER, size_t *TOTAL_BITSIZE) {
+
+void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, size_t BLOCK_NUMBER) {
     /*
     Packs the data from the swhole image sequence into a linked list of structs. 
     Args:
         * INT16_SEQUENCE: sequence of ints for whole image (until EOB).
-        * PACKED_BLOCK_HEAD: pointer to the head of a linked list of PACKED_NODEs.
+        * AC_DATA_NODES: pointer new  pointer to the head of a linked list of AC PACKED_NODEs.
+        * DC_DATA_NODES: pointer new  pointer to the head of a linked list of DC PACKED_NODEs.
         * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
+        * BLOCK_NUMBER: number of blocks in the image.
     */
     int i;
     u_int8_t zeros = 0, val_size;
-    *TOTAL_BITSIZE = 32; // 32 first bits are reserved for image dimensions 16bits x 16bits
-    int16_t val, prev_DC, temp; 
-     // first DC component
-    DATA_NODE *prev = PACKED_BLOCKS_HEAD, *next = NULL;
-    prev_DC = INT16_SEQUENCE[0];
-    pack_DATA_NODE(prev, 0, prev_DC, TOTAL_BITSIZE); 
-   
+    //*TOTAL_BITSIZE = 32; // 32 first bits are reserved for image dimensions 16bits x 16bits
+    int16_t val, prev_DC_val = 0, temp; 
 
-    for (i = 1; i < BLOCK_DIM * BLOCK_DIM * BLOCK_NUMBER - 1; i++) { 
+    DATA_NODE *prev_DC, *curr_DC, *prev_AC, *curr_AC;
+    prev_DC = NULL; prev_AC = NULL;
+
+    for (i = 0; i < BLOCK_DIM * BLOCK_DIM * BLOCK_NUMBER - 1; i++) { 
         val = INT16_SEQUENCE[i];
         if (i%(BLOCK_DIM * BLOCK_DIM) == 0) { // DC component
-            temp = val; val -= prev_DC; prev_DC = temp; // prediction
-            next = new_DATA_NODE();
-            pack_DATA_NODE(next, zeros, val, TOTAL_BITSIZE);
-            prev -> next = next;
-            prev = next;
-            zeros = 0;
-        }
-        
-        if (val == 0 && zeros < 15) {
+            temp = val; val -= prev_DC_val; prev_DC_val = temp; // prediction
+            curr_DC = new_DATA_NODE(); pack_DATA_NODE(curr_DC, 0, val); // pack data node
+            connect_DATA_NODE(&prev_DC, &curr_DC, DC_DATA_NODES);
+        }     
+        else if (val == 0 && zeros < 15) {
             zeros++; 
         } else {
-            next = new_DATA_NODE(); // normal AC 
-            pack_DATA_NODE(next, zeros, val, TOTAL_BITSIZE);
-            prev -> next = next;
-            prev = next;
+            curr_AC = new_DATA_NODE(); pack_DATA_NODE(curr_AC, zeros, val);
+            connect_DATA_NODE(&prev_AC, &curr_AC, AC_DATA_NODES);
             zeros = 0;
         }   
     }
-    next = new_DATA_NODE(); // AC at the end
-    pack_DATA_NODE(next, zeros, 0, TOTAL_BITSIZE);
-    prev -> next = next;
-    prev = next;
+    curr_AC = new_DATA_NODE(); pack_DATA_NODE(curr_AC, zeros, val);
+    prev_AC ->next = curr_AC;
     
 
     /*maybe we dont need eob
@@ -299,6 +292,48 @@ void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE *PACKED_BLOCKS_HEAD, size_t 
     // (15, 0) (0) is the usual compressed token
     // (0, 0) (0) EOB collides with the unlikely scenario of an ending 0 preceded by a filled AC, but when decompressing, we gon be
     // keeping track of the dimensions of the original image, so we can know when to stop (i.e. stop = all data read && EOB reached, else throw ERROR)
+}
+void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, u_int8_t *DRAGGED_ZEROS, int8_t TYPE) {
+
+    /*
+    Packs the data from one blcck into the AC-DC linked list.
+    Args:
+        * INT16_SEQUENCE: sequence of ints  of 1 block.
+        * AC_DATA_NODES: pointer new  pointer to the latest node of a linked list of AC PACKED_NODEs.
+        * DC_DATA_NODES: pointer new  pointer to the latest node of a linked list of DC PACKED_NODEs.
+        * BLOCK_DIM: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
+        * DRAGGED_ZEROS: number of zeros in hypothetical non-updated zero run of the previous block.
+        * TYPE: 1 for first block, 0 for mid block, -1 for last block.
+    */
+    int i;
+    u_int8_t zeros = (TYPE == 1) ? 0 : *DRAGGED_ZEROS;
+    int16_t val, prev_DC_val = 0, temp; 
+
+    DATA_NODE *prev_DC, *curr_DC, *prev_AC, *curr_AC;
+
+
+    prev_DC = (TYPE == 1) ? NULL : DC_DATA_NODES; 
+    prev_AC = (TYPE == 1) ? NULL : AC_DATA_NODES;
+
+    curr_DC = new_DATA_NODE(); pack_DATA_NODE(curr_DC, 0, val); // pack data node
+    connect_DATA_NODE(&prev_DC, &curr_DC, DC_DATA_NODES);
+
+    for (i = 1; i < BLOCK_DIM * BLOCK_DIM - 1; i++) { 
+        val = INT16_SEQUENCE[i];
+        if (val == 0 && zeros < 15) {
+            zeros++; 
+        } else {
+            curr_AC = new_DATA_NODE(); pack_DATA_NODE(curr_AC, zeros, val);
+            connect_DATA_NODE(&prev_AC, &curr_AC, AC_DATA_NODES);
+            zeros = 0;
+        }   
+    }
+    if (TYPE == -1) {
+        curr_AC = new_DATA_NODE(); pack_DATA_NODE(curr_AC, zeros, val);
+        prev_AC ->next = curr_AC;
+    }
+    *DRAGGED_ZEROS = zeros;
+    
 }
 
 //////////////////////////
@@ -375,7 +410,7 @@ void print_list(DATA_NODE* head)
     printf("\n");
 }
 /////////////////////////////
-void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_NODE *PACKED_BLOCK_HEAD)
+void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_NODE **AC_HEAD, DATA_NODE **DC_HEAD)
 {
     size_t TOTAL_BITSIZE;
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -435,13 +470,15 @@ void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_N
     free(INT16_BLOCK);
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Pack
-    blocks_pack(INT16_SEQUENCE, PACKED_BLOCK_HEAD, BLOCK_DIM, 1, &TOTAL_BITSIZE);
+    blocks_pack(INT16_SEQUENCE, AC_HEAD, DC_HEAD, BLOCK_DIM, 1);
     free(INT16_SEQUENCE);
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nPacked list:\n");
-    print_list(PACKED_BLOCK_HEAD);
+    printf("\nPacked DCs:\n");
+    print_list(*DC_HEAD);
+    printf("\nPacked ACs:\n");
+    print_list(*AC_HEAD);
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nPrevious size: 512, new size: %ld\n", TOTAL_BITSIZE);
+    //printf("\nPrevious size: 512, new size: %ld\n", TOTAL_BITSIZE);
 }
 
 // {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}

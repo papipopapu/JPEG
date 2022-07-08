@@ -20,7 +20,14 @@ void free_DATA_NODE_list(DATA_NODE* head)
         free(temp);
     }
 }
-void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL, size_t *TOTAL_BITSIZE)
+void connect_DATA_NODE(DATA_NODE **prev, DATA_NODE **next, DATA_NODE **head) {
+    if (*prev) {(*prev) -> next = *next;} // if *prev is not null, then proceed as usual
+    else {free(*head); *head = *next;} // if prev is null, then that means next is the head
+    *prev = *next;
+}
+
+
+void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
 { 
     u_int8_t isNeg = 0, minBits = min_bits_abs(VAL);
     if (VAL < 0) {VAL = -VAL;  isNeg = 1;}
@@ -32,7 +39,7 @@ void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL, size_t *TOTAL_BI
     node -> VAL <<= (15 - minBits) + 1; // shift VAL to the left as far as we can, leaving one zero for sign (the +1 is since we dont need leading 1)
     //This means that the maximum value of VAL is +-32767 !! TOTAL_BITSIZE += min_bits_abs(val);
     node -> VAL |= (isNeg << 15); // add the sign
-    *TOTAL_BITSIZE += minBits + 8;
+    //*TOTAL_BITSIZE += minBits + 8;
     // if val = 0, the bits VAL doesnt matter bcs its determined by size = 0
     //so we can just remove the most significant bit, since its always going to be 1
 
@@ -50,7 +57,5 @@ void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL, size_t *TOTAL_BI
     // ... etc
 
     // now we would huffman encode RRRRSSSS
-
-
 }
 

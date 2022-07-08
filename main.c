@@ -26,9 +26,16 @@ int main() {
     get_block(max_block, aprox_block, 8, 8, 8, 0, 0);
 
 
-    DATA_NODE* head = new_DATA_NODE();
-    block_process_one(true, aprox_block, 8, head);
-    free_DATA_NODE_list(head);
+    DATA_NODE* AC = new_DATA_NODE();  DATA_NODE* DC = new_DATA_NODE();
+    block_process_one(true, aprox_block, 8, &AC, &DC);
+    free_DATA_NODE_list(AC); free_DATA_NODE_list(DC);
+
+    /*
+    this seg-faults:
+        DATA_NODE** AC;  DATA_NODE** DC;
+        block_process_one(true, aprox_block, 8, AC, DC);
+        free_DATA_NODE_list(*AC); free_DATA_NODE_list(*DC);
+    */
 
 
 
