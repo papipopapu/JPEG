@@ -35,7 +35,7 @@ const u_int8_t ZIGZAG_IDX_8_8[64] =
 
 const u_int16_t AC_LUMINANCE_HUFF[] = {
 // int representation of the bitcodes for each of rrrrssss in the order of AC_HUFF_IDX (also in int representation)
-10, // we aint gon use the eob
+10, 
 0, // when encoding 1 and 0, add one 0 bit before each, and when decoding and comparing with table, if first bit 0, just go to next bit to 
 // distinguish 1 from 0
 1,
@@ -201,7 +201,7 @@ const u_int16_t AC_LUMINANCE_HUFF[] = {
 };
 
 const u_int16_t AC_CHROMINANCE_HUFF[] = {
-0,
+0, // read minimum 2 bits
 1,
 4,
 10,
@@ -364,7 +364,7 @@ const u_int16_t AC_CHROMINANCE_HUFF[] = {
 65533,
 65534};
 
-const u_int16_t DC_LUMINANCE_HUFF_BITS[] = {
+const u_int16_t DC_LUMINANCE_HUFF[] = {
 0,
 2,
 3,
@@ -378,7 +378,7 @@ const u_int16_t DC_LUMINANCE_HUFF_BITS[] = {
 254,
 510};
 
-const u_int16_t DC_CHROMINANCE_HUFF_VALUES[] = {
+const u_int16_t DC_CHROMINANCE_HUFF[] = {
 0,
 1,
 2,
@@ -391,6 +391,7 @@ const u_int16_t DC_CHROMINANCE_HUFF_VALUES[] = {
 510,
 1022,
 2046};
+
 const u_int8_t AC_HUFF_IDX[] = {
 0,
 1,

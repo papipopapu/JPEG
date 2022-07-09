@@ -245,7 +245,16 @@ u_int8_t min_bits_abs(int16_t n) {
     return 0;
 }
 
-
+u_int8_t min_bits(int16_t n) {
+    // min bits to hold the value of int16 //
+    int i;
+    u_int8_t count = 0;
+    for (i = 15; i >= 0; i--) {
+        if ((n >> i) & 1) return 16 - count;
+        count++;
+    }
+    return 0;
+}
 
 
 void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, bool IS_FIRST) {
@@ -455,6 +464,41 @@ void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_N
     ////////////////////////////////////////////////////////////////////////////////////////////////
     //printf("\nPrevious size: 512, new size: %ld\n", TOTAL_BITSIZE);
 }
-
+/*
+uint16 bits_to_write
+uint16 extra_bits
+uint8 rem_bits_num
+while (node->next)
+ bits_to_write = 
+ extra_bits = (node -> next) ? next -> getcode(node -> next -> val) : 
+ */
 // {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
+void blocks_encode(FILE* file, DATA_NODE *AC_DATA_NODES, DATA_NODE *DC_DATA_NODES,
+    const u_int16_t *DC_NEWCODES, const u_int16_t *DC_OLDCODES, const u_int16_t *AC_NEWCODES, const u_int16_t *AC_OLDCODES,
+    size_t BLOCK_DIM, size_t BLOCK_NUMBER, size_t CODES_NUMBER) {
+    /* Encodes a set of blocks into a file.
+    Args:
+     * file: The file to write to.
+     * AC_DATA_NODES: The AC data nodes.
+     * DC_DATA_NODES: The DC data nodes.
+     * DC_NEWCODES: The new DC codes.
+     * DC_OLDCODES: The old DC codes.
+     * AC_NEWCODES: The new AC codes.
+     * AC_OLDCODES: The old AC codes.
+     * BLOCK_DIM: The block dimension.
+     * BLOCK_NUMBER: The number of blocks.
+     * CODES_NUMBER: The number of codes.
+     */
+    // 16 ob + DC + 16ob + AC + 16ob + fill bits
+    size_t encoded_bits = 0, i;
+    u_int16_t ob = 65535;
+    fopen(file, "a");
+    fwrite(ob, sizeof(u_int16_t), 1, file);
+    
+
+
+    
+
+    
+}
 

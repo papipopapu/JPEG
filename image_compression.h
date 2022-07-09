@@ -13,6 +13,12 @@
 extern const float LUMINANCE_QUANT_MATRIX_8_8[64];
 extern const float CHROMINANCE_QUANT_MATRIX_8_8[64];
 extern const u_int8_t ZIGZAG_IDX_8_8[64];
+extern const u_int16_t AC_LUMINANCE_HUFF[162];
+extern const u_int16_t AC_CHROMINANCE_HUFF[162];
+extern const u_int16_t AC_HUFF_IDX[162];
+extern const u_int16_t DC_LUMINANCE_HUFF[12];
+extern const u_int16_t DC_CHROMINANCE_HUFF[12];
+extern const u_int16_t DC_HUFF_IDX[12];
 
 // data_node
 typedef struct DATA_NODE {
@@ -52,8 +58,16 @@ void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE *
 void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_DIM, bool IS_FIRST);
 void block_process_one(bool isY, u_int8_t *UINT8_BLOCK, size_t BLOCK_DIM, DATA_NODE **AC_HEAD, DATA_NODE **DC_HEAD);
 
-void blocks_encode(FILE* file, DATA_NODE *AC_DATA_NODES, DATA_NODE *DC_DATA_NODES, int16_t IMG_WIDTH, int16_t IMG_HEIGHT);
-
+void blocks_encode(FILE* file, DATA_NODE *AC_DATA_NODES, DATA_NODE *DC_DATA_NODES,
+    const u_int16_t *DC_NEWCODES, const u_int16_t *DC_OLDCODES, const u_int16_t *AC_NEWCODES, const u_int16_t *AC_OLDCODES,
+    size_t BLOCK_DIM, size_t BLOCK_NUMBER, size_t CODES_NUMBER);
 // {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
-// 16 one bits + img width(16 bits) + img height(16 bits) + 16 one bits + dc codes
+
+// 16 one bits + img width(16 bits) + img height(16 bits) + 16 one bits 
+// + dc codes/values + 16ob + ac codes/values  + 16ob (for yCbCr)
+// fill rest
+
+
+
+
 #endif
