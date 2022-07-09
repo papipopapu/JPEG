@@ -64,31 +64,84 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
     * 0 if no error occurred, 1 if there is not enough data in the file to read anything, -1 if some non-matching sequence was found.
     */
     
-    int dtr = 0, els, bits = 69, caches_read = 0;
+//  
+//                 ______________   
+//    ____________|_____________|______________   Caches are made of 64 bit integers, and a focus_block of 16 bits
+//   |            |      |      |             |   over them, reading their bites, accounting for when the focus_block 
+//   | curr_cache |      |      | next_cache  |   is contained fully inside curr_cache, and when it as slid between the
+//   |____________|______|______|_____________|   two caches. The code is executed until a number of caches has been read,
+//                | focus_block |                 or an error occured.
+//                |_____________|         
+//               
+//   |____________|
+//        dtr     
+//
+//  dtr is the displacement of the right of the focus_block from the left side of theL current_cache, 
+//  bits is the bit size of the last code read, els is the elements read from the file (whenever we do so),
+//  and caches_read is the caches read :D
+    int dtr = 0, bits = 69, caches_read = 0, els;
+
+//  create caches
     uint64_t curr_cache, next_cache; 
     uint16_t focus_block, deriv_block; 
+
+//  is the focus_block fully contained inside the current_cache (= slipping)?
     bool SLIP = false;
+
+//  if no block can be read, throw error 1
     els = fread(&curr_cache, 8, 1, file); 
     if (els == 0) return 1;
+
+//  while we haven't read enough caches
     while (caches_read < CACHES_TO_READ) { 
-        SLIP =  dtr > 48; // (dtr + 16) > 64 
+
+//  slipping if it is displaced to the righ further than "sizeof(cache)=64 bits - sizeof(focus_block)=16 bits
+        SLIP =  dtr > 48; 
+
+//      if focus_block is slipping, special course of action
         if (SLIP) {
+
+//          try to read next cache into next_cache (smart name)
             els = fread(&next_cache, 8, 1, file);
+
+//          if no further caches can be read, then we set the next_cache to 0, and that works for us
             if (els == 0) next_cache = 0;
-            while(SLIP) {                                    // 2x64 -16 -dtr                // dtr + 64 - 16
+            while(SLIP) {             
+
+//              get the focus_block combining both caches    2x64 -16 - dtr                  dtr + 64 - 16
                 focus_block = 0; focus_block |= (next_cache >> (112 - dtr)) | (curr_cache << (dtr - 48));
+
+//              search for matches inside the provided codes, return -1 if no match is found, add the bits of 
+//              code read to the displacement
                 if (!search_codes(focus_block, CODES, &bits, MATCHES, CODES_NUMBER)) return -1; dtr += bits;
+
+//              now slip is true while we are slipping, and it stops when the whole focus block slid through to 
+//              the next cache
                 SLIP = dtr < 64;
+
+//          when the block has slid through, we either return 0 if it was the last cache, or we go on and take
+//          the next_cache as our new curr_cache
             } if (els == 0) return 0; curr_cache = next_cache; caches_read++; dtr = 0;
-        } else {                                        // 64 - 16 -dtr
+
+//      if focus_block is not slipping, we  proceed as usual and read the focus block entirely from curr_cache
+        } else {                
+            
+//          get focus_block by trimming curr_cache     64 - 16 -dtr
             focus_block = 0; focus_block |= curr_cache >> (48 - dtr);
-            printf("DTR: %d, SLIP: %d, focus_block: ", dtr, SLIP); print_bits(focus_block); printf("\n");
+
+//          search for matches inside the provided codes, return -1 if no match is found, add the bits of 
+//          code read to the displacement
             if (!search_codes(focus_block, CODES, &bits, MATCHES, CODES_NUMBER)) return -1; dtr += bits;   
         }
     } 
-    return 0;
 
+//  easy
+    return 0;
 }
+
+
+//            printf("DTR: %d, SLIP: %d, focus_block: ", dtr, SLIP); print_bits(focus_block); printf("\n");
+
 const uint16_t codes[] = {
 0, // 00 special cases
 1, // 01

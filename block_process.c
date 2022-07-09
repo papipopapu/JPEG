@@ -8,7 +8,6 @@ void get_block(uint8_t *IMAGE, uint8_t *UINT8_BLOCK, size_t IMG_WIDTH, size_t IM
     with an approximation based on near values to reach 8 * 8 pixels.
         * IMAGE: the image to extract the block from.
         * UINT8_BLOCK: the block to fill outside the image.
-        * 8: the size of the block.
         * IMG_WIDTH: the width of the image.
         * IMG_HEIGHT: the height of the image.
         * I0: the x coordinate of upper left corner of the block.
@@ -51,7 +50,6 @@ void block_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr)
         * r_to_y: the block containing r values, and output for y.
         * g_to_Cb: the block containing g values, and output for Cb.
         * b_to_Cr: the block containing b values, and output for Cr.
-        * 8: the size of the block.
     */
    int i;
    uint8_t R, G, B;
@@ -71,7 +69,6 @@ void block_yCbCt_to_rgb(uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b)
         * y_to_r: the block containing y values, and output for r.
         * Cb_to_g: the block containing Cb values, and output for g.
         * Cr_to_b: the block containing Cr values, and output for b.
-        * 8: the size of the block.
     */
    int i;
    uint8_t Y, Cb, Cr;
@@ -90,7 +87,6 @@ void block_downsample420(uint8_t *UINT8_BLOCK)
     Downsample a block of size 8 with a ratio of 4:2:0.
     Args:
         * UINT8_BLOCK: the block to downsample.
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.   
     */
     int i;
     for (i = 0; i < 8; i++) {
@@ -102,9 +98,7 @@ void block_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK) {
     Obtains the discrete cosine transform of the given BLOCK of pixeks, into the FLOAT_BLOCK, both of size 8 * 8.
     Args:
         * UINT8_BLOCK: input block
-        * FLOAT_BLOCK: output block, icontains dct transformation
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.     
-          
+        * FLOAT_BLOCK: output block, icontains dct transformation          
     */
     int i, j, k, l;
     float ai, aj, temp, cte = 2./8;
@@ -129,9 +123,7 @@ void block_inv_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK)
     Obtains the inversse discrete cosine transform of the given BLOCK of pixeks, into the FLOAT_BLOCK, both of size 8 * 8.
     Args:
         * UINT8_BLOCK: output block
-        * FLOAT_BLOCK: inùt block, contains the dct transform 
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.     
-          
+        * FLOAT_BLOCK: inùt block, contains the dct transform           
     */
     int u, v, x, y;
     float au, av, temp, cte = 2./8;
@@ -155,10 +147,10 @@ void general_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK, size_t BLOCK_WIDTH, s
     Obtains the discrete cosine transform of the given chunk of pixeks, into the FLOAT_BLOCK.
     Used when a whole BLOCK does not fit, here only part of the BLOCK varaible's memory will be used.
     Args:
-        * UINT8_BLOCK: input block
-                           The block is assumed to be of size BLOCK_WIDTH * BLOCK_HEIGHT.
+        * UINT8_BLOCK: input block. The block is assumed to be of size BLOCK_WIDTH * BLOCK_HEIGHT.
         * FLOAT_BLOCK: output block
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.     
+        * BLOCK_WIDTH: width of the block
+        * BLOCK_HEIGHT: height of the block
     */
     int i, j, k, l;
     float ai, aj, temp, cte = 2./sqrt(BLOCK_WIDTH * BLOCK_HEIGHT);
@@ -184,7 +176,6 @@ void block_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLOAT_B
         * QUANT_MAT: quantization matrix
         * INT16_BLOCK: output block
         * FLOAT_BLOCK: input block
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
     int i;
     for (i = 0; i < 8 * 8; i++) {  
@@ -199,7 +190,6 @@ void block_inv_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLO
         * QUANT_MAT: quantization matrix
         * FLOAT_BLOCK: output block 
         * INT16_BLOCK: input block
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
     int i;
     for (i = 0; i < 64; i++) {  
@@ -213,7 +203,6 @@ void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_
     Args:
         * INT16_SEQUENCE: output block
         * INT16_BLOCK: input block
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
     for (int i = 0; i < 8 * 8; i++) {
         INT16_SEQUENCE[i] = INT16_BLOCK[SERIAL_IDX[i]];
@@ -227,7 +216,6 @@ void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const ui
     Args:
         * INT16_SEQUENCE: input block
         * INT16_BLOCK: output block
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
     */
     for (int i = 0; i < 8 * 8; i++) {
         INT16_SEQUENCE[i] = INT16_BLOCK[SERIAL_IDX[8 * 8 - i - 1]];
@@ -265,7 +253,6 @@ void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **
         * INT16_SEQUENCE: sequence of ints  of 1 block.
         * AC_DATA_NODES: pointer new  pointer to the latest node of a linked list of AC PACKED_NODEs.
         * DC_DATA_NODES: pointer new  pointer to the latest node of a linked list of DC PACKED_NODEs.
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
         * IS_FIRST: true if this is the first block of the image.
     */
     int i;
@@ -304,7 +291,6 @@ void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE *
         * INT16_SEQUENCE: sequence of ints for whole image (until EOB).
         * AC_DATA_NODES: pointer new  pointer to the head of a linked list of AC PACKED_NODEs.
         * DC_DATA_NODES: pointer new  pointer to the head of a linked list of DC PACKED_NODEs.
-        * 8: block dimension, 8 for 8x8 blocks, 16 for 16x16 blocks, etc.
         * BLOCK_NUMBER: number of blocks in the image.
     */
     int i;
