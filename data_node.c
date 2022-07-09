@@ -29,7 +29,7 @@ void connect_DATA_NODE(DATA_NODE **prev, DATA_NODE **next, DATA_NODE **head) {
 
 void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
 { 
-    u_int8_t isNeg = 0, minBits = min_bits_abs(VAL);
+    uint8_t isNeg = 0, minBits = min_bits_abs(VAL);
     if (VAL < 0) {VAL = -VAL;  isNeg = 1;}
     node -> zeros_bitsVAL = zeros; // number of previous zeros
     node -> zeros_bitsVAL <<= 4; // shift to the left 4 bits

@@ -21,7 +21,7 @@ const float CHROMINANCE_QUANT_MATRIX_8_8[64] = {
     99, 99, 99, 99, 99, 99, 99, 99
 };
 
-const u_int8_t ZIGZAG_IDX_8_8[64] = 
+const uint8_t ZIGZAG_IDX_8_8[64] = 
 {
     0, 1, 8, 16, 9, 2, 3, 10,
     17, 24, 32, 25, 18, 11, 4, 5,
@@ -33,7 +33,7 @@ const u_int8_t ZIGZAG_IDX_8_8[64] =
     53, 60, 61, 54, 47, 55, 62, 63
 };
 
-const u_int16_t AC_LUMINANCE_HUFF[] = {
+const uint16_t AC_LUMINANCE_HUFF[] = {
 // int representation of the bitcodes for each of rrrrssss in the order of AC_HUFF_IDX (also in int representation)
 10, 
 0, // when encoding 1 and 0, add one 0 bit before each, and when decoding and comparing with table, if first bit 0, just go to next bit to 
@@ -200,7 +200,7 @@ const u_int16_t AC_LUMINANCE_HUFF[] = {
 65534
 };
 
-const u_int16_t AC_CHROMINANCE_HUFF[] = {
+const uint16_t AC_CHROMINANCE_HUFF[] = {
 0, // read minimum 2 bits
 1,
 4,
@@ -364,7 +364,7 @@ const u_int16_t AC_CHROMINANCE_HUFF[] = {
 65533,
 65534};
 
-const u_int16_t DC_LUMINANCE_HUFF[] = {
+const uint16_t DC_LUMINANCE_HUFF[] = {
 0,
 2,
 3,
@@ -378,7 +378,7 @@ const u_int16_t DC_LUMINANCE_HUFF[] = {
 254,
 510};
 
-const u_int16_t DC_CHROMINANCE_HUFF[] = {
+const uint16_t DC_CHROMINANCE_HUFF[] = {
 0,
 1,
 2,
@@ -392,7 +392,7 @@ const u_int16_t DC_CHROMINANCE_HUFF[] = {
 1022,
 2046};
 
-const u_int8_t AC_HUFF_IDX[] = {
+const uint8_t AC_HUFF_IDX[] = {
 0,
 1,
 2,
@@ -555,6 +555,6 @@ const u_int8_t AC_HUFF_IDX[] = {
 248,
 249,
 250};
-const u_int8_t DC_HUFF_IDX[] = {
+const uint8_t DC_HUFF_IDX[] = {
 0,1,2,3,4,5,6,7,8,9,10,11};
 
