@@ -1,5 +1,5 @@
 #include "image_compression.h"
-const float LUMINANCE_QUANT_MATRIX_8_8[64] = {
+const float LUMINANCE_QUANT[64] = {
     16, 11, 10, 16, 24, 40, 51, 61,
     12, 12, 14, 19, 26, 58, 60, 55,
     14, 13, 16, 24, 40, 57, 69, 56,
@@ -10,7 +10,7 @@ const float LUMINANCE_QUANT_MATRIX_8_8[64] = {
     72, 92, 95, 98, 112, 100, 103, 99
 };
 
-const float CHROMINANCE_QUANT_MATRIX_8_8[64] = {
+const float CHROMINANCE_QUANT[64] = {
     17, 18, 24, 47, 99, 99, 99, 99,
     18, 21, 26, 66, 99, 99, 99, 99,
     24, 26, 56, 99, 99, 99, 99, 99,
@@ -21,7 +21,7 @@ const float CHROMINANCE_QUANT_MATRIX_8_8[64] = {
     99, 99, 99, 99, 99, 99, 99, 99
 };
 
-const uint8_t ZIGZAG_IDX_8_8[64] = 
+const uint8_t ZIGZAG_IDX[64] = 
 {
     0, 1, 8, 16, 9, 2, 3, 10,
     17, 24, 32, 25, 18, 11, 4, 5,

@@ -29,14 +29,15 @@ void print_bits64(uint64_t n)
         printf("%ld", (n >> i) & 1);
     }
 }
-bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER){
+bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER) {
+    /* Checks if there are any matches of any amount of crecent digits of the compare base inside the CODES provided. */
     int k, bits = 1; // we are goind to read at least 2 digits
     bool code_found = false;
     uint16_t compare_deriv;
     while (bits <= 16 && !code_found) { // while we are not at the end of the group in focus and we haven't found the code
         bits++; 
         compare_deriv = compare_base >> (16 - bits); // read progressibely more digits of the code
-        for (k=0; k<CODES_NUMBER; k++) { // check if code exists in our list
+        for (k=0; k < CODES_NUMBER; k++) { // check if code exists in our list
             if (compare_deriv == CODES[k]) {
                 code_found = true;
                 MATCHES[k]++;
@@ -47,13 +48,28 @@ bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, 
     return code_found;
 }
 int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t CODES_NUMBER, size_t CACHES_TO_READ) {
+    /* 
+    Reads binary file with binary data, and compares it with a list of prefix binary codes (no code is the prefix of another),
+    starting from size of 2 bits. That is, the code reads a minimum of 2 bits, but the integers correspoding to the codes 
+    can have 1 bit (integers 0 and 1), as long as they are have been encoded like "00" and "01" respectively.
+    
+    Args:
+    * file: file pointer to the binary file in "wb" mode
+    * CODES: array of ints correponding decimal interpretation of the binary codes
+    * MATCHES: output array of ints correponding to the number of times the code with the same index has been found in the file
+    * CODES_NUMBER: number of elements in CODES and MATCHES
+    * CACHES_TO_READ: number of 64 bit chunks to read from the file
+    * 
+    Returns:
+    * 0 if no error occurred, 1 if there is not enough data in the file to read anything, -1 if some non-matching sequence was found.
+    */
+    
     int dtr = 0, els, bits = 69, caches_read = 0;
     uint64_t curr_cache, next_cache; 
     uint16_t focus_block, deriv_block; 
-    bool SLIP = false;// util, number of bits inside last code read, codes read, wether matching code has been found
-    els = fread(&curr_cache, 8, 1, file); // initialize initial left and right groups
-    if (CACHES_TO_READ == 0) return 1;
-    if (els == 0) return 2;
+    bool SLIP = false;
+    els = fread(&curr_cache, 8, 1, file); 
+    if (els == 0) return 1;
     while (caches_read < CACHES_TO_READ) { 
         SLIP =  dtr > 48; // (dtr + 16) > 64 
         if (SLIP) {
@@ -73,49 +89,6 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
     return 0;
 
 }
-int decode_uniquecodes_bin(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t CODE_NUMBER, size_t CODES_TO_READ, size_t CACHE_BLOCKS_BYTES) {
- if (CODES_TO_READ == 0) return -1;
-    // group = 16 bit number fromed by taking a 16 bits of the binary file 
-    uint64_t left, right;
-    uint16_t compare_base, compare_deriv;// left group, right group, group in focus, util
-    int dtr = 0, els, CACHE_BLOCKS_BITS = CACHE_BLOCKS_BYTES*8;//  displacement of compare_base to the right with respect to the left most side of left group
-    int k, bits = 0, codes_read = 0;
-    int bits_left = 1; 
-    bool code_found = false, end_reached = false;// util, number of bits inside last code read, codes read, wether matching code has been found
-    els = fread(&left, CACHE_BLOCKS_BYTES, 1, file); // initialize initial left and right groups
-    if (els == 0) return -1;
-    els = fread(&right, CACHE_BLOCKS_BYTES, 1, file);
-    if (els == 0) right = 0;
-    do { // only read CODES_TO_READ codes
-        if (dtr  >= (CACHE_BLOCKS_BITS-16)) { // if the compare_base is completely out of the left group
-            left = right; // move the left group to the right group
-            els = fread(&right, CACHE_BLOCKS_BYTES, 1, file);
-            if (els == 0) {
-                end_reached = true;
-                right = 0;
-                bits_left = CACHE_BLOCKS_BITS - dtr;
-            }
-            dtr -= CACHE_BLOCKS_BITS; // reset the displacement taking into account the slip into the new right group
-            bits = dtr; // i0 = displacement to the right after the reset
-        }
-        compare_base = 0;// 
-        compare_base |= (dtr > (CACHE_BLOCKS_BITS - 16)) ? (right >> (2*CACHE_BLOCKS_BITS - 16 - dtr)) | (left << (16 - CACHE_BLOCKS_BITS + dtr)) : (left >> (CACHE_BLOCKS_BITS - 16 - dtr)); // according the the amount of bits inside the las code read, get next group in focus
-        bits = 1; // we are goind to read at least 2 digits
-        while (bits <= 16 && !code_found) { // while we are not at the end of the group in focus and we haven't found the code
-            bits++; // see pre-previous comment for explanation on order of execution
-            compare_deriv = compare_base >> (16 - bits); // read progressibely more digits of the code
-            for (k=0; k<CODE_NUMBER; k++) { // check if code exists in our list
-                if (compare_deriv == CODES[k]) {
-                    code_found = true;
-                    MATCHES[k]++;
-                }
-            }  
-        }
-        if (!code_found) {return 1;} // no corresponding code found, something went wrong...
-        codes_read++; code_found = false; dtr += bits; if (end_reached) bits_left -= bits; // updates
-    } while (codes_read < CODES_TO_READ &&  bits_left > 0);
-    return 0;
-}
 const uint16_t codes[] = {
 0, // 00 special cases
 1, // 01
@@ -132,6 +105,8 @@ int main () {
     size_t len = 0;
     FILE *file = fopen("data.bin", "wb");
     uint64_t n = 15271705341792288768, n2 = 0; // 26 and 1, 11010 01 0 0000 0000
+    len = fwrite(&n, sizeof(uint64_t), 1, file);
+    n = 0;
     len = fwrite(&n, sizeof(uint64_t), 1, file);
     if (len != 1) {
         printf("error writing to file\n");
@@ -161,7 +136,7 @@ int main () {
 
 
     file = fopen("data.bin", "rb");
-    int success = DECODE_BIN_16_64(file, codes, matches, 8, 1);
+    int success = DECODE_BIN_16_64(file, codes, matches, 8, 2);
     fclose(file);
 
     printf("Success?: %d\n", success);

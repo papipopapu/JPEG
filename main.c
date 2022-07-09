@@ -23,11 +23,11 @@ int main() {
 
     int16_t h[64];
     u_int8_t aprox_block[n*m];
-    get_block(max_block, aprox_block, 8, 8, 8, 0, 0);
+    get_block(max_block, aprox_block, 8, 8, 0, 0);
 
 
     DATA_NODE* AC = new_DATA_NODE();  DATA_NODE* DC = new_DATA_NODE();
-    block_process_one(true, aprox_block, 8, &AC, &DC);
+    block_process_one(true, aprox_block, &AC, &DC);
     free_DATA_NODE_list(AC); free_DATA_NODE_list(DC);
 
     /*
