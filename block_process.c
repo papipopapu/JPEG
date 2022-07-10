@@ -358,10 +358,10 @@ void print_list(DATA_NODE* head)
     }
     printf("\n");
 }
-uint8_t min_bits(uint16_t n) {
-    // min bits to hold the abolute value of int16 //
+
+uint8_t min_bits(uint16_t n) {  
+    if (n == 0) return 1;
     int i;
-    if (n < 0) n = -n;
     uint8_t count = 0;
     for (i = 15; i >= 0; i--) {
         if ((n >> i) & 1) return 16 - count;

@@ -14,18 +14,24 @@ bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, 
         }  
     } return false;
 }
-
-void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two) {
-    //*next_cache = [00000000...];  curr_cache = [{prev_codes}0000000...]
-    uint32_t bigger = CODE;
-    int bits = min_bits(CODE); if (min_two) bits += (CODE == 1 | CODE == 0) ? 1 : 0;
-    if (*dtr + bits > 32) {
-        *curr_cache |= bigger >> bits - 32 + *dtr; 
-        *next_cache |= bigger << 64 - bits - *dtr;
-    } else if (*dtr + bits == 32) {
+bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER) {
+    int i;
+    for (i=0; i < CODES_NUMBER; i++) {
+        if (rrrrssss == VALUES[i]) {*code = CODES[i]; return true;}
+    } return false;
+}
+void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool HUFFMAN_MODE) {
+    //*next_cache = [00000000...];  curr_cache = [{prev_codes}{0000000}...]
+    uint32_t bigger = CODE; int bits, slip;
+    bits = min_bits(CODE); if (HUFFMAN_MODE) {bits += ((CODE == 1 || CODE == 0) ? 1 : 0);}
+    slip = *dtr + bits - 32;
+    if (slip > 0) {
+        *curr_cache |= bigger >> slip; 
+        *next_cache |= bigger << (32 - slip);
+    } else if (slip == 0) {
         *curr_cache |= bigger;
     } else {
-        *curr_cache |= bigger << 32 - bits - *dtr;
+        *curr_cache |= bigger << -slip;
     } *dtr += bits;
 }
 
@@ -42,8 +48,8 @@ uint16_t get_bits_at(uint32_t cache, int dtr, int bits) {
         * The bits read from the cache
     
     [0,0,0,{1,0,1,1,1},...] size = 32 bits
-    |____| |________|
-     dtr      bits
+       |____| |________|
+        dtr      bits
     */  
     if (dtr >= 32 || dtr < 0 || bits == 0) return 0;
     bits = min(bits, 32 - dtr);
@@ -53,38 +59,40 @@ uint16_t get_bits_at(uint32_t cache, int dtr, int bits) {
     ret &= (1 << bits) - 1;
     return ret;
 }
+
 uint16_t pullfrom_DECODER(DECODER *decoder, int bits) {
+    
     if (bits > 16) bits = 16;
     uint16_t ret = 0;
     uint32_t bruh = 0;
     int bits_curr, bits_next;
+    int slip = bits + decoder -> dtr -32;
     size_t els;
-    if (decoder -> dtr + bits > 32) {            
-        if (decoder -> end_of_file) return 0;
-        bits_curr = 32 - decoder -> dtr; bits_next = bits - bits_curr;
-        ret |=  (get_bits_at(decoder -> curr_cache, decoder -> dtr     , bits_curr) << bits_next)
-            |   (get_bits_at(decoder -> next_cache, decoder -> dtr - 32, bits_next)             );
-        decoder -> curr_cache = decoder -> next_cache;
+    if (slip > 0) {            
+        if (decoder -> end_of_file) return 0; // if you go over the end of the file, return 0 always
+        ret |=  (decoder -> curr_cache << slip) | (decoder -> next_cache >> (64 - slip));        
+        decoder -> curr_cache = decoder -> next_cache; decoder -> dtr -= 32;
         els = fread(&decoder -> next_cache, 4, 1, decoder -> file);
-        decoder -> dtr -= 32;
-        if (els == 0) {decoder -> end_of_file = true; printf("Reached end of file\n");}      
+        if (els == 0) decoder -> end_of_file = true;   
     } else {
         ret = get_bits_at(decoder -> curr_cache, decoder -> dtr, bits); 
     }
     decoder -> dtr += bits;
-    
     return ret;
 }
-DECODER *new_DECODER(const char* filename) {
+DECODER *new_DECODER(const char* filename) {// fread(&num2, 4, 1, file);
     size_t els1, els2;
     DECODER *decoder = (DECODER*)malloc(sizeof(DECODER));
     decoder -> filename = filename;
     decoder -> file = fopen(filename, "rb");
     decoder -> dtr = 0; 
-    els1 = fread(&decoder -> curr_cache, 4, 1, decoder -> file);  
+    els1 = fread(&(decoder -> curr_cache), 4, 1, decoder -> file);  
     els2 = fread(&decoder -> next_cache, 4, 1, decoder -> file); 
     decoder -> end_of_file = (els2 == 0) ? true : false;
-    return (els1 == 0) ? NULL : decoder;
+    if (els1 == 0) {
+        free(decoder);
+        return NULL;
+    }
 }
 void free_DECODER(DECODER *decoder) {
     fclose(decoder -> file);
@@ -94,6 +102,7 @@ void free_DECODER(DECODER *decoder) {
 void pushto_ENCODER(ENCODER *encoder, uint16_t CODE, bool min_two) {
     encode_to_cache(CODE, &(encoder -> curr_cache), &(encoder -> next_cache), &(encoder -> dtr), min_two);
     if (encoder -> dtr >= 32) {
+        printf("here\n");
         fwrite(&(encoder -> curr_cache), 4, 1, encoder -> file);
         encoder -> curr_cache = encoder -> next_cache; encoder -> next_cache = 0;
         encoder -> dtr -= 32;
@@ -102,16 +111,15 @@ void pushto_ENCODER(ENCODER *encoder, uint16_t CODE, bool min_two) {
 ENCODER *new_ENCODER(const char* filename) {
     ENCODER *encoder = (ENCODER*)malloc(sizeof(ENCODER));
     encoder -> filename = filename;
-    encoder -> file = fopen(filename, "wb");
+    encoder -> file = fopen(filename, "ab");
     encoder -> dtr = 0; encoder -> curr_cache = 0; encoder -> next_cache = 0;
     encoder -> bracket_seq = 65535;
     pushto_ENCODER(encoder, encoder -> bracket_seq, false);
     return encoder;
-    // file in append mode
 }
 void free_ENCODER(ENCODER *encoder) {
     pushto_ENCODER(encoder, encoder -> bracket_seq, false);
-    if (encoder -> curr_cache != 0) {
+    if (encoder -> dtr != 0) {
         fwrite(&(encoder -> curr_cache), 4, 1, encoder -> file);
     } 
     fclose(encoder -> file);
@@ -120,7 +128,7 @@ void free_ENCODER(ENCODER *encoder) {
 
 
 int ENCODE_DATA(const char* filename, DATA_NODE *NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER) {
-    ENCODER *encoder = new_ENCODER("data.bin");
+    ENCODER *encoder = new_ENCODER(filename);
     DATA_NODE *node = NODES;
     uint16_t code;
     bool encode_VAL = false;
@@ -134,22 +142,4 @@ int ENCODE_DATA(const char* filename, DATA_NODE *NODES, const uint16_t *CODES, c
             node = node -> next;
         } encode_VAL = !encode_VAL;
     } free_ENCODER(encoder); return 0;
-}
-
-int DECODE_DATA(const char* filename, DATA_NODE **NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER) {
-    DECODER *decoder = new_DECODER("data.bin");
-    DATA_NODE *node = NULL;
-    uint16_t code;
-    bool decode_VAL = false;
-    if (!NODES) return -1;
-    while (true) {
-        if (decode_VAL) {
-            node = new_DATA_NODE(node, pullfrom_DECODER(decoder, 16), NULL);
-        } else {
-            if (!get_code(&code, pullfrom_DECODER(decoder, 16), CODES, VALUES, CODES_NUMBER)) return -1;
-            node = new_DATA_NODE(node, code, NULL);
-            decode_VAL = !decode_VAL;
-        } if (decoder -> end_of_file) break;
-    } free_DECODER(decoder);
-    *NODES = node; return 0;
 }

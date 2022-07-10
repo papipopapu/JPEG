@@ -31,7 +31,7 @@ void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
 { 
     uint8_t isNeg = 0, minBits; 
     if (VAL < 0) {VAL = -VAL;  isNeg = 1;}
-    minBits = min_bits(VAL);
+    minBits = (VAL == 0) ? 0 : min_bits(VAL);
     node -> rrrrssss = zeros; // number of previous zeros
     node -> rrrrssss <<= 4; // shift to the left 4 bits
     node -> rrrrssss |= minBits; // add on the other side the minimum bits to represent VAL - 1 (even though we know

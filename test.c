@@ -10,11 +10,10 @@
    __typeof__ (b) _b = (b); \
    _a < _b ? _a : _b; })
 
-const uint32_t UNO = 1;
-uint8_t min_bits(uint16_t n) {
-    // min bits to hold the abolute value of int16 //
+
+uint8_t min_bits(uint16_t n) {  
+    if (n == 0) return 1;
     int i;
-    if (n < 0) n = -n;
     uint8_t count = 0;
     for (i = 15; i >= 0; i--) {
         if ((n >> i) & 1) return 16 - count;
@@ -81,7 +80,7 @@ void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
 { 
     uint8_t isNeg = 0, minBits; 
     if (VAL < 0) {VAL = -VAL;  isNeg = 1;}
-    minBits = min_bits(VAL);
+    minBits = (VAL == 0) ? 0 : min_bits(VAL);
     node -> rrrrssss = zeros; // number of previous zeros
     node -> rrrrssss <<= 4; // shift to the left 4 bits
     node -> rrrrssss |= minBits; // add on the other side the minimum bits to represent VAL - 1 (even though we know
@@ -206,17 +205,18 @@ bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uin
         if (rrrrssss == VALUES[i]) {*code = CODES[i]; return true;}
     } return false;
 }
-void encode_16_32(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two) {
-    //*next_cache = [00000000...];  curr_cache = [{prev_codes}0000000...]
-    uint32_t bigger = CODE;
-    int bits = min_bits(CODE); if (min_two) bits += (CODE == 1 | CODE == 0) ? 1 : 0;
-    if (*dtr + bits > 32) {
-        *curr_cache |= bigger >> bits - 32 + *dtr; 
-        *next_cache |= bigger << 64 - bits - *dtr;
-    } else if (*dtr + bits == 32) {
+void encode_16_32(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool HUFFMAN_MODE) {
+    //*next_cache = [00000000...];  curr_cache = [{prev_codes}{0000000}...]
+    uint32_t bigger = CODE; int bits, slip;
+    bits = min_bits(CODE); if (HUFFMAN_MODE) {bits += ((CODE == 1 || CODE == 0) ? 1 : 0);}
+    slip = *dtr + bits - 32;
+    if (slip > 0) {
+        *curr_cache |= bigger >> slip; 
+        *next_cache |= bigger << (32 - slip);
+    } else if (slip == 0) {
         *curr_cache |= bigger;
     } else {
-        *curr_cache |= bigger << 32 - bits - *dtr;
+        *curr_cache |= bigger << -slip;
     } *dtr += bits;
 }
 
@@ -257,41 +257,54 @@ typedef struct DECODER {
     FILE *file;
     int dtr;
     uint32_t curr_cache, next_cache;
-    uint16_t bracket_seq;
     bool end_of_file;
 } DECODER;
 
 uint16_t pullfrom_DECODER(DECODER *decoder, int bits) {
+    
     if (bits > 16) bits = 16;
     uint16_t ret = 0;
     uint32_t bruh = 0;
     int bits_curr, bits_next;
+    int slip = bits + decoder -> dtr -32;
     size_t els;
-    if (decoder -> dtr + bits > 32) {            
-        if (decoder -> end_of_file) return 0;
-        bits_curr = 32 - decoder -> dtr; bits_next = bits - bits_curr;
-        ret |=  (get_bits_at(decoder -> curr_cache, decoder -> dtr     , bits_curr) << bits_next)
-            |   (get_bits_at(decoder -> next_cache, decoder -> dtr - 32, bits_next)             );
-        decoder -> curr_cache = decoder -> next_cache;
+    if (slip > 0) {            
+        if (decoder -> end_of_file) return 0; // if you go over the end of the file, return 0 always
+        ret |=  (decoder -> curr_cache << slip) | (decoder -> next_cache >> (64 - slip));        
+        decoder -> curr_cache = decoder -> next_cache; decoder -> dtr -= 32;
         els = fread(&decoder -> next_cache, 4, 1, decoder -> file);
-        decoder -> dtr -= 32;
-        printf("Ret: "); print_bits(ret); printf("\n"); // fix this nigga
-        if (els == 0) {decoder -> end_of_file = true; printf("Reached end of file\n");}      
+        if (els == 0) decoder -> end_of_file = true;   
     } else {
         ret = get_bits_at(decoder -> curr_cache, decoder -> dtr, bits); 
     }
+    printf("curr_cache: "); print_bits32(decoder -> curr_cache); printf("\n");
+    printf("next_cache: "); print_bits32(decoder -> next_cache); printf("\n");
+    printf("ret: "); print_bits(ret); printf("\n");
     decoder -> dtr += bits;
-    
     return ret;
 }
-DECODER *new_DECODER(const char* filename) {
+DECODER *new_DECODER(const char* filename) {// fread(&num2, 4, 1, file);
+
+    /*
+    FILE *file = fopen("data.bin", "rb");
+    uint32_t num;
+    fread(&num, 4, 1, file);
+    printf("num: %u, ", num); print_bits32(num); printf("\n");
+    fclose(file);
+    */
+
     size_t els1, els2;
     DECODER *decoder = (DECODER*)malloc(sizeof(DECODER));
     decoder -> filename = filename;
     decoder -> file = fopen(filename, "rb");
     decoder -> dtr = 0; 
-    els1 = fread(&decoder -> curr_cache, 4, 1, decoder -> file);  
+    decoder -> curr_cache = 0; decoder -> next_cache = 0;
+    els1 = fread(&(decoder -> curr_cache), 4, 1, decoder -> file);  
     els2 = fread(&decoder -> next_cache, 4, 1, decoder -> file); 
+    printf("/////////////////// CREATING DECODER..... //////////////////////////////\n");
+    printf("curr_cache: "); print_bits32(decoder -> curr_cache); printf("\n");
+    printf("next_cache: "); print_bits32(decoder -> next_cache); printf("\n");
+    printf("////////////////////////////////////////////////////////////////////////\n");
     decoder -> end_of_file = (els2 == 0) ? true : false;
     if (els1 == 0) {
         free(decoder);
@@ -305,18 +318,26 @@ void free_DECODER(DECODER *decoder) {
 
 void pushto_ENCODER(ENCODER *encoder, uint16_t CODE, bool min_two) {
     encode_16_32(CODE, &(encoder -> curr_cache), &(encoder -> next_cache), &(encoder -> dtr), min_two);
+    printf("///////////////////////////// ENCODING PRE /////////////////////////////////////\n");
     printf("curr_cache: "); print_bits32(encoder -> curr_cache); printf("\n");
     printf("next_cache: "); print_bits32(encoder -> next_cache); printf("\n");
+    printf("////////////////////////////////////////////////////////////////////////////\n");
+
     if (encoder -> dtr >= 32) {
+        printf("here\n");
         fwrite(&(encoder -> curr_cache), 4, 1, encoder -> file);
         encoder -> curr_cache = encoder -> next_cache; encoder -> next_cache = 0;
         encoder -> dtr -= 32;
     }
+    printf("///////////////////////////// ENCODING AFTER /////////////////////////////////////\n");
+    printf("curr_cache: "); print_bits32(encoder -> curr_cache); printf("\n");
+    printf("next_cache: "); print_bits32(encoder -> next_cache); printf("\n");
+    printf("////////////////////////////////////////////////////////////////////////////\n");
 }
 ENCODER *new_ENCODER(const char* filename) {
     ENCODER *encoder = (ENCODER*)malloc(sizeof(ENCODER));
     encoder -> filename = filename;
-    encoder -> file = fopen(filename, "wb");
+    encoder -> file = fopen(filename, "ab");
     encoder -> dtr = 0; encoder -> curr_cache = 0; encoder -> next_cache = 0;
     encoder -> bracket_seq = 65535;
     pushto_ENCODER(encoder, encoder -> bracket_seq, false);
@@ -324,10 +345,15 @@ ENCODER *new_ENCODER(const char* filename) {
     // file in append mode
 }
 void free_ENCODER(ENCODER *encoder) {
+    printf("///////////////////////////// CLOSING /////////////////////////////////////\n");
+    printf("curr_cache: "); print_bits32(encoder -> curr_cache); printf("\n");
+    printf("next_cache: "); print_bits32(encoder -> next_cache); printf("\n");
+    printf("////////////////////////////////////////////////////////////////////////////\n");
     pushto_ENCODER(encoder, encoder -> bracket_seq, false);
-    if (encoder -> curr_cache != 0) {
+    if (encoder -> dtr != 0) {
         fwrite(&(encoder -> curr_cache), 4, 1, encoder -> file);
     } 
+
     fclose(encoder -> file);
     free(encoder);
 }
@@ -366,16 +392,39 @@ const uint16_t codes[] = {
 
 int main () {
     
-    ENCODER *encoder = new_ENCODER("bruh.bin");
-    pushto_ENCODER(encoder, 69, false);
-    free_ENCODER(encoder);
+    ENCODER *encoder = new_ENCODER("data.bin");
 
-    uint16_t code; DECODER *decoder = new_DECODER("bruh.bin");
-    code = pullfrom_DECODER(decoder, 16); // pull ob
-    code = pullfrom_DECODER(decoder, 7); // pull code
-    code = pullfrom_DECODER(decoder, 16); // pull ob
-    //code = pullfrom_DECODER(decoder, 90000); // pull a lot
+
+    pushto_ENCODER(encoder, 0, false); 
+
+
+    free_ENCODER(encoder);
+    /*
+    FILE * file = fopen("data.bin", "wb");
+    uint32_t num = 4294934527;
+    fwrite(&num, 4, 1, file);
+    fclose(file);*/
+    /*
+    file = fopen("data.bin", "rb");
+    uint32_t num2;
+    fread(&num2, 4, 1, file);
+    printf("%u\n", num2);filename
+    fclose(file);
+
+    print_bits32(num2);
+
+    */
+    uint16_t code; DECODER *decoder = new_DECODER("data.bin");
+
+    code = pullfrom_DECODER(decoder, 16); 
     printf("Code: %d\n", code);
+
+    code = pullfrom_DECODER(decoder, 1); 
+    printf("Code: %d\n", code);
+
+    code = pullfrom_DECODER(decoder, 15); 
+    printf("Code: %d\n", code);
+    
     free_DECODER(decoder);
 
     

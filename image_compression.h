@@ -46,7 +46,6 @@ typedef struct DECODER {
     FILE *file;
     int dtr;
     uint32_t curr_cache, next_cache;
-    uint16_t bracket_seq;
     bool end_of_file;
 } DECODER;
 
