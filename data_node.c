@@ -37,8 +37,9 @@ void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
     node -> rrrrssss |= minBits; // add on the other side the minimum bits to represent VAL - 1 (even though we know
     // we have eliminated the first bit, so bits = 1 -> 1, bits = 0 -> 0))
     node -> VAL = VAL; // add value on the right of VAL 
-    node -> VAL <<= (15 - minBits) + 1; // shift VAL to the left as far as we can, leaving one zero for sign (the +1 is since we dont need leading 1)
+    node -> VAL &= ~(1 << (minBits-1)); // mask off the bits that are not needed
+    node -> VAL |= isNeg << (minBits-1); // shift VAL to the left as far as we can, leaving one zero for sign (the +1 is since we dont need leading 1)
     //This means that the maximum value of VAL is +-32767 !! TOTAL_BITSIZE += min_bits_abs(val);
-    node -> VAL |= (isNeg << 15); // add the sign
+     // add the sign
 }
 

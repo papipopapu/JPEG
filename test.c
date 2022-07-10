@@ -5,6 +5,12 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <math.h>
+#define min(a,b) \
+({ __typeof__ (a) _a = (a); \
+   __typeof__ (b) _b = (b); \
+   _a < _b ? _a : _b; })
+
+const uint32_t UNO = 1;
 uint8_t min_bits(uint16_t n) {
     // min bits to hold the abolute value of int16 //
     int i;
@@ -17,7 +23,7 @@ uint8_t min_bits(uint16_t n) {
     return 0;
 }
 
-/* for AC codes bits = 8 bits for DC codes bits = 4 bits 
+/* for AC codes bits = 8 bits for DC codes bits = 4 bits print_bits32
 1- assign weights to DATA_NODEs and store them in HUFFMN_NODEs
 2- build the HUFFMAN tree
 3- traverse the HUFFMAN and create table of codes
@@ -33,11 +39,11 @@ void print_bits(uint16_t n)
         printf("%d", (n >> i) & 1);
     }
 }
-void print_bits64(uint64_t n)
+void print_bits32(uint32_t n)
 {
     int i;
-    for (i = 63; i >= 0; i--) {
-        printf("%ld", (n >> i) & 1);
+    for (i = 31; i >= 0; i--) {
+        printf("%d", (n >> i) & 1);
     }
 }
 typedef struct DATA_NODE {
@@ -73,17 +79,20 @@ void connect_DATA_NODE(DATA_NODE **prev, DATA_NODE **next, DATA_NODE **head) {
 
 void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
 { 
-    uint8_t isNeg = 0, minBits = min_bits_abs(VAL);
+    uint8_t isNeg = 0, minBits; 
     if (VAL < 0) {VAL = -VAL;  isNeg = 1;}
+    minBits = min_bits(VAL);
     node -> rrrrssss = zeros; // number of previous zeros
     node -> rrrrssss <<= 4; // shift to the left 4 bits
     node -> rrrrssss |= minBits; // add on the other side the minimum bits to represent VAL - 1 (even though we know
     // we have eliminated the first bit, so bits = 1 -> 1, bits = 0 -> 0))
     node -> VAL = VAL; // add value on the right of VAL 
-    node -> VAL <<= (15 - minBits) + 1; // shift VAL to the left as far as we can, leaving one zero for sign (the +1 is since we dont need leading 1)
+    node -> VAL &= ~(1 << (minBits-1)); // mask off the bits that are not needed
+    node -> VAL |= isNeg << (minBits-1); // shift VAL to the left as far as we can, leaving one zero for sign (the +1 is since we dont need leading 1)
     //This means that the maximum value of VAL is +-32767 !! TOTAL_BITSIZE += min_bits_abs(val);
-    node -> VAL |= (isNeg << 15); // add the sign
+     // add the sign
 }
+
 bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER) {
     /* Checks if there are any matches of any amount of crecent digits of the compare base inside the CODES provided. */
     int k; *bits_read = 1; // we are goind to read at least 2 digits
@@ -99,7 +108,7 @@ bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, 
         }  
     } return false;
 }
-int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t CODES_NUMBER, size_t CACHES_TO_READ) {
+int DECODE_BIN_16_32(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t CODES_NUMBER, size_t CACHES_TO_READ) {
     /* 
     Reads binary file with binary data, and compares it with a list of prefix binary codes (no code is the prefix of another),
     starting from size of 2 bits. That is, the code reads a minimum of 2 bits, but the integers correspoding to the codes 
@@ -110,7 +119,7 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
     * CODES: array of ints correponding decimal interpretation of the binary codes
     * MATCHES: output array of ints correponding to the number of times the code with the same index has been found in the file
     * CODES_NUMBER: number of elements in CODES and MATCHES
-    * CACHES_TO_READ: number of 64 bit chunks to read from the file
+    * CACHES_TO_READ: number of 32 bit chunks to read from the file
     * 
     Returns:
     * 0 if no error occurred, 1 if there is not enough data in the file to read anything, -1 if some non-matching sequence was found.
@@ -118,7 +127,7 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
     
 //  
 //                 ______________   
-//    ____________|_____________|______________   Caches are made of 64 bit integers, and a focus_block of 16 bits
+//    ____________|_____________|______________   Caches are made of 32 bit integers, and a focus_block of 16 bits
 //   |            |      |      |             |   over them, reading their bites, accounting for when the focus_block 
 //   | curr_cache |      |      | next_cache  |   is contained fully inside curr_cache, and when it as slid between the
 //   |____________|______|______|_____________|   two caches. The code is executed until a number of caches has been read,
@@ -134,7 +143,7 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
     int dtr = 0, bits = 69, caches_read = 0, els;
 
 //  create caches
-    uint64_t curr_cache, next_cache; 
+    uint32_t curr_cache, next_cache; 
     uint16_t focus_block, deriv_block; 
 
 //  is the focus_block fully contained inside the current_cache (= slipping)?
@@ -147,8 +156,8 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
 //  while we haven't read enough caches
     while (caches_read < CACHES_TO_READ) { 
 
-//      slipping if it is displaced to the righ further than "sizeof(cache)=64 bits - sizeof(focus_block)=16 bits
-        SLIP =  dtr > 48; 
+//      slipping if it is displaced to the righ further than "sizeof(cache)=32 bits - sizeof(focus_block)=16 bits
+        SLIP =  dtr > 16; 
 
 //      if focus_block is slipping, special course of action
         if (SLIP) {
@@ -160,8 +169,8 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
             if (els == 0) next_cache = 0;
             while(SLIP) {             
 
-//              get the focus_block combining both caches    2x64 -16 - dtr                  dtr + 64 - 16
-                focus_block = 0; focus_block |= (next_cache >> (112 - dtr)) | (curr_cache << (dtr - 48));
+//              get the focus_block combining both caches    2x32 -16 - dtr                  dtr - 32 + 16
+                focus_block = 0; focus_block |= (next_cache >> (48 - dtr)) | (curr_cache << (dtr - 16));
 
 //              search for matches inside the provided codes, return -1 if no match is found, add the bits of 
 //              code read to the displacement
@@ -169,7 +178,7 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
 
 //              now slip is true while we are slipping, and it stops when the whole focus block slid through to 
 //              the next cache
-                SLIP = dtr < 64;
+                SLIP = dtr < 32;
 
 //          when the block has slid through, we either return 0 if it was the last cache, or we go on and take
 //          the next_cache as our new curr_cache
@@ -178,8 +187,8 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
 //      if focus_block is not slipping, we  proceed as usual and read the focus block entirely from curr_cache
         } else {                
             
-//          get focus_block by trimming curr_cache     64 - 16 -dtr
-            focus_block = 0; focus_block |= curr_cache >> (48 - dtr);
+//          get focus_block by trimming curr_cache     32 - 16 -dtr
+            focus_block = 0; focus_block |= curr_cache >> (16 - dtr);
 
 //          search for matches inside the provided codes, return -1 if no match is found, add the bits of 
 //          code read to the displacement
@@ -190,64 +199,157 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
 //  easy
     return 0;
 }
-uint16_t read_nbits(uint16_t VAL, uint8_t n) {
-    /* 
-    Reads n bits from a 16 bit integer, and returns the result.
-    
-    Args:
-    * VAL: 16 bit integer to read from
-    * n: number of bits to read
-    
-    Returns:
-    * The result of reading n bits from VAL
-    */
-    return VAL >> (16 - n);
+
+bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER) {
+    int i;
+    for (i=0; i < CODES_NUMBER; i++) {
+        if (rrrrssss == VALUES[i]) {*code = CODES[i]; return true;}
+    } return false;
 }
-void encode_CODE(uint16_t CODE, uint64_t *curr_cache, uint64_t *next_cache, uint8_t disp) {
-    *next_cache = 0; // curr_cache = [{prev_codes}0000000]
-    uint64_t bigger = CODE;
-    int bits = min_bits(CODE); bits += (CODE == 1 | CODE == 0) ? 1 : 0;
-    int SLIP = disp + bits - 64;
-    if (SLIP > 0) {
-        *curr_cache |= bigger >> SLIP; // mira esto bien no esta bien .D
-        *next_cache |= bigger << SLIP;
+void encode_16_32(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two) {
+    //*next_cache = [00000000...];  curr_cache = [{prev_codes}0000000...]
+    uint32_t bigger = CODE;
+    int bits = min_bits(CODE); if (min_two) bits += (CODE == 1 | CODE == 0) ? 1 : 0;
+    if (*dtr + bits > 32) {
+        *curr_cache |= bigger >> bits - 32 + *dtr; 
+        *next_cache |= bigger << 64 - bits - *dtr;
+    } else if (*dtr + bits == 32) {
+        *curr_cache |= bigger;
     } else {
-        *curr_cache |= bigger << -SLIP;
-    }
+        *curr_cache |= bigger << 32 - bits - *dtr;
+    } *dtr += bits;
+}
+
+uint16_t get_bits_at(uint32_t cache, int dtr, int bits) {
+    /*  Get a number of bits at a position dtr (displacement to the right) from a uint32_t cache.
+        If bits produce overflow, they are truncated to the maximum amount of bits that fit.
+        If dtr is bigger or equal to 32, dtr < 0 or the number of bits asked is 0, the function returns 0.
+
+        Args:
+        * cache: the cache to read from
+        * dtr: the displacement to the right
+        * bits: the number of bits to read
+        Returns:
+        * The bits read from the cache
     
-
-
+    [0,0,0,{1,0,1,1,1},...] size = 32 bits
+       |____| |________|
+        dtr      bits
+    */  
+    if (dtr >= 32 || dtr < 0 || bits == 0) return 0;
+    bits = min(bits, 32 - dtr);
+    int desp; uint16_t ret;
+    desp = 32 - dtr - bits;
+    ret = (desp == 0) ? cache : cache >> desp; 
+    ret &= (1 << bits) - 1;
+    return ret;
 }
-void encode_VALUE(uint16_t VALUE, uint64_t curr_cache, uint64_t next_cache) {
+typedef struct ENCODER {
+    const char* filename;
+    FILE *file;
+    int dtr;
+    uint32_t curr_cache, next_cache;
+    uint16_t bracket_seq;
+} ENCODER;
 
+typedef struct DECODER {
+    const char* filename;
+    FILE *file;
+    int dtr;
+    uint32_t curr_cache, next_cache;
+    uint16_t bracket_seq;
+    bool end_of_file;
+} DECODER;
+
+uint16_t pullfrom_DECODER(DECODER *decoder, int bits) {
+    if (bits > 16) bits = 16;
+    uint16_t ret = 0;
+    uint32_t bruh = 0;
+    int bits_curr, bits_next;
+    size_t els;
+    if (decoder -> dtr + bits > 32) {            
+        if (decoder -> end_of_file) return 0;
+        bits_curr = 32 - decoder -> dtr; bits_next = bits - bits_curr;
+        ret |=  (get_bits_at(decoder -> curr_cache, decoder -> dtr     , bits_curr) << bits_next)
+            |   (get_bits_at(decoder -> next_cache, decoder -> dtr - 32, bits_next)             );
+        decoder -> curr_cache = decoder -> next_cache;
+        els = fread(&decoder -> next_cache, 4, 1, decoder -> file);
+        decoder -> dtr -= 32;
+        printf("Ret: "); print_bits(ret); printf("\n"); // fix this nigga
+        if (els == 0) {decoder -> end_of_file = true; printf("Reached end of file\n");}      
+    } else {
+        ret = get_bits_at(decoder -> curr_cache, decoder -> dtr, bits); 
+    }
+    decoder -> dtr += bits;
+    
+    return ret;
 }
-int ENCODE_DC(FILE *file, DATA_NODE *NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER, size_t VALUES_NUMBER) {
+DECODER *new_DECODER(const char* filename) {
+    size_t els1, els2;
+    DECODER *decoder = (DECODER*)malloc(sizeof(DECODER));
+    decoder -> filename = filename;
+    decoder -> file = fopen(filename, "rb");
+    decoder -> dtr = 0; 
+    els1 = fread(&decoder -> curr_cache, 4, 1, decoder -> file);  
+    els2 = fread(&decoder -> next_cache, 4, 1, decoder -> file); 
+    decoder -> end_of_file = (els2 == 0) ? true : false;
+    if (els1 == 0) {
+        free(decoder);
+        return NULL;
+    }
+}
+void free_DECODER(DECODER *decoder) {
+    fclose(decoder -> file);
+    free(decoder);
+}
+
+void pushto_ENCODER(ENCODER *encoder, uint16_t CODE, bool min_two) {
+    encode_16_32(CODE, &(encoder -> curr_cache), &(encoder -> next_cache), &(encoder -> dtr), min_two);
+    printf("curr_cache: "); print_bits32(encoder -> curr_cache); printf("\n");
+    printf("next_cache: "); print_bits32(encoder -> next_cache); printf("\n");
+    if (encoder -> dtr >= 32) {
+        fwrite(&(encoder -> curr_cache), 4, 1, encoder -> file);
+        encoder -> curr_cache = encoder -> next_cache; encoder -> next_cache = 0;
+        encoder -> dtr -= 32;
+    }
+}
+ENCODER *new_ENCODER(const char* filename) {
+    ENCODER *encoder = (ENCODER*)malloc(sizeof(ENCODER));
+    encoder -> filename = filename;
+    encoder -> file = fopen(filename, "wb");
+    encoder -> dtr = 0; encoder -> curr_cache = 0; encoder -> next_cache = 0;
+    encoder -> bracket_seq = 65535;
+    pushto_ENCODER(encoder, encoder -> bracket_seq, false);
+    return encoder;
+    // file in append mode
+}
+void free_ENCODER(ENCODER *encoder) {
+    pushto_ENCODER(encoder, encoder -> bracket_seq, false);
+    if (encoder -> curr_cache != 0) {
+        fwrite(&(encoder -> curr_cache), 4, 1, encoder -> file);
+    } 
+    fclose(encoder -> file);
+    free(encoder);
+}
+
+
+int ENCODE_DATA(const char* filename, DATA_NODE *NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER) {
+    ENCODER *encoder = new_ENCODER("data.bin");
     DATA_NODE *node = NODES;
-    uint8_t value = node -> VAL;
-    uint64_t curr_cache = 0, next_cache = 0;
-    int curr_dtr = 0, prev_dtr, bits = 0;
+    uint16_t code;
+    bool encode_VAL = false;
     if (!NODES) return -1;
     while (node -> next) {
-        curr_dtr += node -> rrrrssss;
-
-        if (curr_dtr > 48) {
-
-
-
-            fwrite(&curr_cache, 8, 1, file);
-            curr_cache = next_cache;
-            curr_cache -= 64; prev_dtr = curr_dtr;
-        }
-        
-        value = node -> VAL;
-        fwrite(&curr_cache, 8, 1, file);
-        node = node -> next;
-    } // reache last node
-
+        if (encode_VAL) {
+            pushto_ENCODER(encoder, node -> VAL, false);
+        } else {
+            if (!get_code(&code, node -> rrrrssss, CODES, VALUES, CODES_NUMBER)) return -1;  
+            pushto_ENCODER(encoder, code, true);
+            node = node -> next;
+        } encode_VAL = !encode_VAL;
+    } free_ENCODER(encoder); return 0;
 }
-    // file in append mode
 
-    
 
 //            printf("DTR: %d, SLIP: %d, focus_block: ", dtr, SLIP); print_bits(focus_block); printf("\n");
 
@@ -263,55 +365,21 @@ const uint16_t codes[] = {
 };
 
 int main () {
-    uint8_t matches[] = {0,0,0,0,0,0,0,0};
-    size_t len = 0;
-    FILE *file = fopen("data.bin", "wb");
-    uint64_t n = 15271705341792288768, n2 = 0; // 26 and 1, 11010 01 0 0000 0000
-    len = fwrite(&n, sizeof(uint64_t), 1, file);
-    n = 0;
-    len = fwrite(&n, sizeof(uint64_t), 1, file);
-    if (len != 1) {
-        printf("error writing to file\n");
-        return 1;
-    }
-    fclose(file);
+    
+    ENCODER *encoder = new_ENCODER("bruh.bin");
+    pushto_ENCODER(encoder, 69, false);
+    free_ENCODER(encoder);
 
-    file = fopen("data.bin", "rb");
-    fread(&n2, sizeof(uint64_t), 1, file);
-    printf("Truth: %lu\n", n2);
-    printf("true bits: "); print_bits64(n2); printf("\n");
-    fclose(file);
-
-    uint32_t n3 = 0;
-    file = fopen("data.bin", "rb");
-    fread(&n3, sizeof(uint32_t), 1, file);
-    printf("TEST: %u\n", n3);
-    printf("TESTA bits: "); print_bits64(n3); printf("\n");
-    fclose(file);
-
-
-
-
-
-
-
-
-
-    file = fopen("data.bin", "rb");
-    int success = DECODE_BIN_16_64(file, codes, matches, 8, 2);
-    fclose(file);
-
-    printf("Success?: %d\n", success);
-
-    for (int i = 0; i < 8; i++) {
-        printf("%d: %d\n", codes[i], matches[i]);
-    }
-
-
+    uint16_t code; DECODER *decoder = new_DECODER("bruh.bin");
+    code = pullfrom_DECODER(decoder, 16); // pull ob
+    code = pullfrom_DECODER(decoder, 7); // pull code
+    code = pullfrom_DECODER(decoder, 16); // pull ob
+    //code = pullfrom_DECODER(decoder, 90000); // pull a lot
+    printf("Code: %d\n", code);
+    free_DECODER(decoder);
 
     
 
-    //print_bits(n);
 
     return 0;
 }
@@ -334,12 +402,12 @@ int main () {
     if (true){
     file = fopen("data.bin", "wb");
 
-    uint64_t n = 257;
+    uint32_t n = 257;
 
 
     
     if (!file) return 1;
-    els = fwrite(&n, sizeof(uint64_t), 1, file);
+    els = fwrite(&n, sizeof(uint32_t), 1, file);
     fclose(file);
     if (els == 0) return 2;
 

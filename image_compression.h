@@ -9,7 +9,10 @@
 #include <inttypes.h>
 #include <string.h>
 
-
+#define min(a,b) \
+({ __typeof__ (a) _a = (a); \
+   __typeof__ (b) _b = (b); \
+   _a < _b ? _a : _b; })
 // Constants
 // BLOCK DIMENSIONS = 8X8
 extern const float LUMINANCE_QUANT[64];
@@ -30,6 +33,22 @@ typedef struct DATA_NODE {
     struct DATA_NODE *next; // next pack
 } DATA_NODE;
 
+typedef struct ENCODER {
+    const char* filename;
+    FILE *file;
+    int dtr;
+    uint32_t curr_cache, next_cache;
+    uint16_t bracket_seq;
+} ENCODER;
+
+typedef struct DECODER {
+    const char* filename;
+    FILE *file;
+    int dtr;
+    uint32_t curr_cache, next_cache;
+    uint16_t bracket_seq;
+    bool end_of_file;
+} DECODER;
 
 DATA_NODE *new_DATA_NODE();
 void free_DATA_NODE_list(DATA_NODE* head);
@@ -63,11 +82,22 @@ void block_process_one(bool isY, uint8_t *UINT8_BLOCK, DATA_NODE **AC_HEAD, DATA
 void blocks_encode(FILE* file, DATA_NODE *AC_DATA_NODES, DATA_NODE *DC_DATA_NODES,
     const uint16_t *DC_NEWCODES, const uint16_t *DC_OLDCODES, const uint16_t *AC_NEWCODES, const uint16_t *AC_OLDCODES,
     size_t BLOCK_NUMBER, size_t CODES_NUMBER);
-// {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
 
-// 16 one bits + img width(16 bits) + img height(16 bits) + 16 one bits 
-// + dc codes/values + 16ob + ac codes/values  + 16ob (for yCbCr)
-// fill rest
+// coders
+bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER);
+bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
+void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two);
+uint16_t get_bits_at(uint32_t cache, int dtr, int bits);
+int ENCODE_DATA(const char* filename, DATA_NODE *NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
+
+uint16_t pullfrom_DECODER(DECODER *decoder, int bits);
+DECODER *new_DECODER(const char* filename);
+void free_DECODER(DECODER *decoder);
+
+void pushto_ENCODER(ENCODER *encoder, uint16_t CODE, bool min_two);
+ENCODER *new_ENCODER(const char* filename);
+void free_ENCODER(ENCODER *encoder);
+
 
 
 
