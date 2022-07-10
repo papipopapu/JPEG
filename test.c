@@ -5,6 +5,17 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <math.h>
+uint8_t min_bits(uint16_t n) {
+    // min bits to hold the abolute value of int16 //
+    int i;
+    if (n < 0) n = -n;
+    uint8_t count = 0;
+    for (i = 15; i >= 0; i--) {
+        if ((n >> i) & 1) return 16 - count;
+        count++;
+    }
+    return 0;
+}
 
 /* for AC codes bits = 8 bits for DC codes bits = 4 bits 
 1- assign weights to DATA_NODEs and store them in HUFFMN_NODEs
@@ -29,23 +40,64 @@ void print_bits64(uint64_t n)
         printf("%ld", (n >> i) & 1);
     }
 }
+typedef struct DATA_NODE {
+    /* Temporary struct to pack both AC and DC components */
+    uint8_t rrrrssss; // packed here
+    int16_t VAL; // prob less than 16 bits, min bits will be packed and then recasted to an int16 to be interpreted
+    struct DATA_NODE *next; // next pack
+} DATA_NODE;
+DATA_NODE *new_DATA_NODE()
+{
+    DATA_NODE* fetus = NULL;
+    fetus = (DATA_NODE*)malloc(sizeof(DATA_NODE));
+    fetus -> next = NULL;
+    return fetus;
+}
+
+void free_DATA_NODE_list(DATA_NODE* head)
+{
+    DATA_NODE* temp;
+    while (head != NULL)
+    {
+        temp = head;
+        head = head -> next;
+        free(temp);
+    }
+}
+void connect_DATA_NODE(DATA_NODE **prev, DATA_NODE **next, DATA_NODE **head) {
+    if (*prev) {(*prev) -> next = *next;} // if *prev is not null, then proceed as usual
+    else {free(*head); *head = *next;} // if prev is null, then that means next is the head
+    *prev = *next;
+}
+
+
+void pack_DATA_NODE(DATA_NODE *node, int8_t zeros, int16_t VAL)
+{ 
+    uint8_t isNeg = 0, minBits = min_bits_abs(VAL);
+    if (VAL < 0) {VAL = -VAL;  isNeg = 1;}
+    node -> rrrrssss = zeros; // number of previous zeros
+    node -> rrrrssss <<= 4; // shift to the left 4 bits
+    node -> rrrrssss |= minBits; // add on the other side the minimum bits to represent VAL - 1 (even though we know
+    // we have eliminated the first bit, so bits = 1 -> 1, bits = 0 -> 0))
+    node -> VAL = VAL; // add value on the right of VAL 
+    node -> VAL <<= (15 - minBits) + 1; // shift VAL to the left as far as we can, leaving one zero for sign (the +1 is since we dont need leading 1)
+    //This means that the maximum value of VAL is +-32767 !! TOTAL_BITSIZE += min_bits_abs(val);
+    node -> VAL |= (isNeg << 15); // add the sign
+}
 bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER) {
     /* Checks if there are any matches of any amount of crecent digits of the compare base inside the CODES provided. */
-    int k, bits = 1; // we are goind to read at least 2 digits
-    bool code_found = false;
+    int k; *bits_read = 1; // we are goind to read at least 2 digits
     uint16_t compare_deriv;
-    while (bits <= 16 && !code_found) { // while we are not at the end of the group in focus and we haven't found the code
-        bits++; 
-        compare_deriv = compare_base >> (16 - bits); // read progressibely more digits of the code
+    while ((*bits_read) <= 16) { // while we are not at the end of the group in focus and we haven't found the code
+        (*bits_read)++; 
+        compare_deriv = compare_base >> (16 - *bits_read); // read progressibely more digits of the code
         for (k=0; k < CODES_NUMBER; k++) { // check if code exists in our list
             if (compare_deriv == CODES[k]) {
-                code_found = true;
                 MATCHES[k]++;
+                return true;
             }
         }  
-    }
-    *bits_read = bits;
-    return code_found;
+    } return false;
 }
 int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t CODES_NUMBER, size_t CACHES_TO_READ) {
     /* 
@@ -95,7 +147,7 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
 //  while we haven't read enough caches
     while (caches_read < CACHES_TO_READ) { 
 
-//  slipping if it is displaced to the righ further than "sizeof(cache)=64 bits - sizeof(focus_block)=16 bits
+//      slipping if it is displaced to the righ further than "sizeof(cache)=64 bits - sizeof(focus_block)=16 bits
         SLIP =  dtr > 48; 
 
 //      if focus_block is slipping, special course of action
@@ -138,7 +190,64 @@ int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t
 //  easy
     return 0;
 }
+uint16_t read_nbits(uint16_t VAL, uint8_t n) {
+    /* 
+    Reads n bits from a 16 bit integer, and returns the result.
+    
+    Args:
+    * VAL: 16 bit integer to read from
+    * n: number of bits to read
+    
+    Returns:
+    * The result of reading n bits from VAL
+    */
+    return VAL >> (16 - n);
+}
+void encode_CODE(uint16_t CODE, uint64_t *curr_cache, uint64_t *next_cache, uint8_t disp) {
+    *next_cache = 0; // curr_cache = [{prev_codes}0000000]
+    uint64_t bigger = CODE;
+    int bits = min_bits(CODE); bits += (CODE == 1 | CODE == 0) ? 1 : 0;
+    int SLIP = disp + bits - 64;
+    if (SLIP > 0) {
+        *curr_cache |= bigger >> SLIP; // mira esto bien no esta bien .D
+        *next_cache |= bigger << SLIP;
+    } else {
+        *curr_cache |= bigger << -SLIP;
+    }
+    
 
+
+}
+void encode_VALUE(uint16_t VALUE, uint64_t curr_cache, uint64_t next_cache) {
+
+}
+int ENCODE_DC(FILE *file, DATA_NODE *NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER, size_t VALUES_NUMBER) {
+    DATA_NODE *node = NODES;
+    uint8_t value = node -> VAL;
+    uint64_t curr_cache = 0, next_cache = 0;
+    int curr_dtr = 0, prev_dtr, bits = 0;
+    if (!NODES) return -1;
+    while (node -> next) {
+        curr_dtr += node -> rrrrssss;
+
+        if (curr_dtr > 48) {
+
+
+
+            fwrite(&curr_cache, 8, 1, file);
+            curr_cache = next_cache;
+            curr_cache -= 64; prev_dtr = curr_dtr;
+        }
+        
+        value = node -> VAL;
+        fwrite(&curr_cache, 8, 1, file);
+        node = node -> next;
+    } // reache last node
+
+}
+    // file in append mode
+
+    
 
 //            printf("DTR: %d, SLIP: %d, focus_block: ", dtr, SLIP); print_bits(focus_block); printf("\n");
 

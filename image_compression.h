@@ -15,18 +15,18 @@
 extern const float LUMINANCE_QUANT[64];
 extern const float CHROMINANCE_QUANT[64];
 extern const uint8_t ZIGZAG_IDX[64];
-extern const uint16_t AC_LUMINANCE_HUFF[162];
-extern const uint16_t AC_CHROMINANCE_HUFF[162];
-extern const uint8_t AC_HUFF_IDX[162];
-extern const uint16_t DC_LUMINANCE_HUFF[12];
-extern const uint16_t DC_CHROMINANCE_HUFF[12];
-extern const uint8_t DC_HUFF_IDX[12];
+extern const uint16_t AC_LUMINANCE_HCODES[162];
+extern const uint16_t AC_CHROMINANCE_CODES[162];
+extern const uint8_t AC_VALUES[162];
+extern const uint16_t DC_LUMINANCE_CODES[12];
+extern const uint16_t DC_CHROMINANCE_CODES[12];
+extern const uint8_t DC_VALUES[12];
 
 // data_node
 typedef struct DATA_NODE {
     /* Temporary struct to pack both AC and DC components */
-    uint8_t zeros_bitsVAL; // packed here
-    int16_t VAL; // prob less than 16 bits, min bits will be packed and then recasted to an int16 to be interpreted
+    uint8_t rrrrssss; // packed here
+    uint16_t VAL; // prob less than 16 bits, min bits will be packed and then recasted to an int16 to be interpreted
     struct DATA_NODE *next; // next pack
 } DATA_NODE;
 
@@ -55,7 +55,7 @@ void block_inv_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLO
 void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 
-uint8_t min_bits_abs(int16_t n);
+uint8_t min_bits(uint16_t n);
 void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_NUMBER);
 void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, bool IS_FIRST);
 void block_process_one(bool isY, uint8_t *UINT8_BLOCK, DATA_NODE **AC_HEAD, DATA_NODE **DC_HEAD);
