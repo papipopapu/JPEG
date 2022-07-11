@@ -32,14 +32,13 @@ typedef struct DATA_NODE {
     uint16_t VAL; // prob less than 16 bits, min bits will be packed and then recasted to an int16 to be interpreted
     struct DATA_NODE *next; // next pack
 } DATA_NODE;
-
-typedef struct ENCODER {
+typedef struct OUTSTREAM {
     const char* filename;
     FILE *file;
-    int dtr;
-    uint32_t curr_cache, next_cache;
-    uint16_t bracket_seq;
-} ENCODER;
+    int d_bits, d_bytes, buffer_bytes;
+    char *buffer;
+    bool eof;
+} OUTSTREAM;
 
 typedef struct DECODER {
     const char* filename;

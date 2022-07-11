@@ -1,18 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <inttypes.h>
-#include <string.h>
-#include <math.h>
-
-
-typedef struct OUTSTREAM {
-    const char* filename;
-    FILE *file;
-    int d_bits, d_bytes, buffer_bytes;
-    char *buffer;
-    bool eof;
-} OUTSTREAM;
+#include "image_compression.h"
 
 int pushto_OUTSTREAM(OUTSTREAM *out, uint data, int bits) {
     // bits are the number of bits to encode from least to most significant
@@ -70,38 +56,3 @@ int delete_OUTSTREAM(OUTSTREAM *out) {
     free(out);
     return 0;
 }
-
-const uint16_t codes[] = {
-0, // 00 special cases
-1, // 01
-26,
-247,
-1015,
-4086,
-32706,
-65420,
-};
-
-int main () {
-    
-    OUTSTREAM *out = new_OUTSTREAM("test.bin", 10);
-    printf("push: %d\n",pushto_OUTSTREAM(out, 69, 7));
-    delete_OUTSTREAM(out);
-    FILE * file = fopen("test.bin", "rb");
-    uint8_t num = 88;
-    fread(&num, 1, 1, file);
-    printf("%d\n", num);
-    fclose(file);
-
-
-
-    
-
-
-    return 0;
-}
-
-
-
-
-
