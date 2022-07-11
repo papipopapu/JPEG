@@ -35,7 +35,8 @@ typedef struct DATA_NODE {
 typedef struct OUTSTREAM {
     const char* filename;
     FILE *file;
-    int d_bits, d_bytes, buffer_bytes;
+    int written_bits, written_bytes, buffer_bytes;
+    // written means alredy written ~ dtr
     char *buffer;
     bool eof;
 } OUTSTREAM;
@@ -92,9 +93,6 @@ uint16_t pullfrom_DECODER(DECODER *decoder, int bits);
 DECODER *new_DECODER(const char* filename);
 void free_DECODER(DECODER *decoder);
 
-void pushto_ENCODER(ENCODER *encoder, uint16_t CODE, bool min_two);
-ENCODER *new_ENCODER(const char* filename);
-void free_ENCODER(ENCODER *encoder);
 
 
 
