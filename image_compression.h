@@ -40,7 +40,14 @@ typedef struct OUTSTREAM {
     char *buffer;
     bool eof;
 } OUTSTREAM;
-
+typedef struct INSTREAM {
+    const char* filename;
+    FILE *file;
+    int written_bits, written_bytes, buffer_bytes;
+    // written means alredy written ~ dtr
+    char *buffer;
+    bool eof;
+} INSTREAM;
 typedef struct DECODER {
     const char* filename;
     FILE *file;
@@ -89,13 +96,13 @@ void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, 
 uint16_t get_bits_at(uint32_t cache, int dtr, int bits);
 int ENCODE_DATA(const char* filename, DATA_NODE *NODES, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
 
-uint16_t pullfrom_DECODER(DECODER *decoder, int bits);
-DECODER *new_DECODER(const char* filename);
-void free_DECODER(DECODER *decoder);
+
+
+int pushto_OUTSTREAM(OUTSTREAM *out, uint data, int bits);
+OUTSTREAM *new_OUTSTREAM(const char* filename, int buffer_bytes);
+int delete_OUTSTREAM(OUTSTREAM *out);
 
 
 
-
-
-
+void print_ubits(uint8_t n);
 #endif
