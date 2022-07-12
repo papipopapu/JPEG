@@ -222,88 +222,66 @@ void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const ui
     }
 }
 
+void DATA_PACKET_pack(DATA_PACKET *data, int16_t VAL, uint8_t zeros) {
+    uint8_t is_neg = 0, min_bits; 
+    if (VAL < 0) {VAL = -VAL;  is_neg = 1;}
+    min_bits = (VAL == 0) ? 0 : min_bits_abs(VAL);
+    data -> rrrrssss = zeros; // number of previous zeros
+    data -> rrrrssss <<= 4; // shift to the left 4 bits
+    data -> rrrrssss |= min_bits; // add on the other side the minimum bits to represent VAL - 1 (even though we know
+    // we have eliminated the first bit, so bits = 1 -> 1, bits = 0 -> 0))
+    data -> VAL = VAL;
+    data -> VAL &= (1 << (min_bits-1))-1; // mask off the bits that are not needed
+    data -> VAL |= is_neg << min_bits; // add the sign bit
+    data -> VAL_bits = min_bits;
+}
 
-
-void block_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, bool IS_FIRST) {
-
-    /*
-    Packs the data from one blcck into the AC-DC linked list.
-    Args:
-        * INT16_SEQUENCE: sequence of ints  of 1 block.
-        * AC_DATA_NODES: pointer new  pointer to the latest node of a linked list of AC PACKED_NODEs.
-        * DC_DATA_NODES: pointer new  pointer to the latest node of a linked list of DC PACKED_NODEs.
-        * IS_FIRST: true if this is the first block of the image.
-    */
+bool DATA_PACKET_encode(DATA_PACKET *data, uint16_t *code, const uint16_t *CODES, const uint8_t *VALUES, size_t N_CODES) {
     int i;
-    uint8_t zeros = 0;
-    int16_t val, prev_DC_val = 0, temp; 
-
-    DATA_NODE *prev_DC, *curr_DC, *prev_AC, *curr_AC;
-
-    if (IS_FIRST) { // SPECIAL CASE
-        prev_AC = NULL; prev_DC = NULL;
-    } else {
-        prev_AC = *AC_DATA_NODES; prev_DC = *DC_DATA_NODES;
+    for (i = 0; i < N_CODES; i++) {
+        if (VALUES[i] == data -> rrrrssss) {
+            data -> rs_code = CODES[i];
+            return true;
+        }
     }
+    return false;
+}
 
-    curr_DC = new_DATA_NODE(); pack_DATA_NODE(curr_DC, 0, INT16_SEQUENCE[0]); // DC value
-    connect_DATA_NODE(&prev_DC, &curr_DC, DC_DATA_NODES);
+int block_encode(OUTSTREAM* out, const char *filename, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
+ const uint16_t *DC_CODES, const uint8_t *DC_VALUES,
+ const uint16_t *AC_CODES, const uint8_t *AC_VALUES) {
 
-    for (i = 1; i < 8 * 8; i++) { 
+    DATA_PACKET data;
+    DATA_PACKET_pack(&data, INT16_SEQUENCE[0] - PREV_DC, 0);
+    if (!DATA_PACKET_encode(&data, &data.rs_code, DC_CODES, DC_VALUES, 12)) return -1;
+    OUTSTREAM_push(out, data.rs_code, min_bits_code(data.rs_code));
+    OUTSTREAM_push(out, data.VAL, data.VAL_bits);
+    int i, zeros = 0; int16_t val = 0;
+    for (i = 1; i < 64; i++) {
         val = INT16_SEQUENCE[i];
-        if (val == 0 && zeros < 15) { //  running
-            zeros++; 
+        if (val == 0) {
+            zeros++;
+            if (zeros == 16) {
+                DATA_PACKET_pack(&data, 0, 16);
+                if (!DATA_PACKET_encode(&data, &data.rs_code, AC_CODES, AC_VALUES, 162)) return -1;
+                OUTSTREAM_push(out, data.rs_code, min_bits_code(data.rs_code));
+                zeros = 0;
+            }
         } else {
-            curr_AC = new_DATA_NODE(); pack_DATA_NODE(curr_AC, zeros, val); // ACs and 16 zeros runs
-            connect_DATA_NODE(&prev_AC, &curr_AC, AC_DATA_NODES);
+            DATA_PACKET_pack(&data, val, zeros);
+            if (!DATA_PACKET_encode(&data, &data.rs_code, AC_CODES, AC_VALUES, 162)) return -1;
+            OUTSTREAM_push(out, data.rs_code, min_bits_code(data.rs_code));
+            OUTSTREAM_push(out, data.VAL, data.VAL_bits);
             zeros = 0;
-        }   
+        }
     }
-    
-    curr_AC = new_DATA_NODE(); pack_DATA_NODE(curr_AC, 0, 0); // EOB
-    prev_AC -> next = curr_AC;    
+    OUTSTREAM_push(out, 0, 8);
 }
-void blocks_pack(int16_t *INT16_SEQUENCE, DATA_NODE **AC_DATA_NODES, DATA_NODE **DC_DATA_NODES, size_t BLOCK_NUMBER) {
-    /*
-    Packs the data from the swhole image sequence into a linked list of structs. 
-    Args:
-        * INT16_SEQUENCE: sequence of ints for whole image (until EOB).
-        * AC_DATA_NODES: pointer new  pointer to the head of a linked list of AC PACKED_NODEs.
-        * DC_DATA_NODES: pointer new  pointer to the head of a linked list of DC PACKED_NODEs.
-        * BLOCK_NUMBER: number of blocks in the image.
-    */
-    int i;
-    if (BLOCK_NUMBER == 0) return;
-    block_pack(INT16_SEQUENCE, AC_DATA_NODES, DC_DATA_NODES, true);
-    for (i = 1; i < BLOCK_NUMBER; i ++) { 
-          block_pack(INT16_SEQUENCE + i * 64, AC_DATA_NODES, DC_DATA_NODES, false);
-    }
 
-    // size = 0 -> val = 0
-    // (15, 0) (0) is the usual compressed token
-    // (0, 0) (0) EOB collides with the unlikely scenario of an ending 0 preceded by a filled AC, but when decompressing, we gon be
-    // keeping track of the dimensions of the original image, so we can know when to stop (i.e. stop = all data read && EOB reached, else throw ERROR)
-}
 
 //////////////////////////
-void print_ui8(uint8_t *matrix) {
-    int i, j;
-    for (i = 0; i < 8; i++) {
-        for (j = 0; j < 8; j++) {
-            printf("%d ", matrix[i * 8 + j]);
-        }
-        printf("\n");
-    }
-}
-void print_i8(int8_t *matrix) {
-    int i, j;
-    for (i = 0; i < 8; i++) {
-        for (j = 0; j < 8; j++) {
-            printf("%d ", matrix[i * 8 + j]);
-        }
-        printf("\n");
-    }
-}
+
+
 void print_i16(int16_t *matrix) {
     int i, j;
     for (i = 0; i < 8; i++) {
@@ -350,24 +328,8 @@ void print_32bits(uint32_t n)
         printf("%d", (n >> i) & 1);
     }
 }
-void dummie() {
-    printf("dummie\n");
-}
-void print_list(DATA_NODE* head)
-{
-    DATA_NODE* curr = head;
-    printf("\n");
-    while (curr != NULL) {
-        printf("rrrrssss: ");
-        print_ubits(curr->rrrrssss);
-        printf(", VAL bits: ");
-        print_16bits(curr->VAL);
-        printf("\n");
-        
-        curr = curr->next;
-    }
-    printf("\n");
-}
+
+
 
 uint8_t min_bits(uint16_t n) {  
     if (n == 0) return 1;
@@ -379,86 +341,33 @@ uint8_t min_bits(uint16_t n) {
     }
     return 0;
 }
-/////////////////////////////
-void block_process_one(bool isY, uint8_t *UINT8_BLOCK, DATA_NODE **AC_HEAD, DATA_NODE **DC_HEAD)
-{
-    size_t TOTAL_BITSIZE;
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nInitial block:\n");
-    print_ui8(UINT8_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Downsample
-    if (!isY) {
-        block_downsample420(UINT8_BLOCK);
-    } 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nDownsampled:\n");
-    print_ui8(UINT8_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // DCT
-    float *FLOAT_BLOCK = malloc(sizeof(float) * 64);
-    block_dct(UINT8_BLOCK, FLOAT_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nAfter dct:\n");
-    print_f(FLOAT_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // inverse DCT
-    block_inv_dct(UINT8_BLOCK, FLOAT_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nReconstructed after idct:\n");
-    print_ui8(UINT8_BLOCK);
-    block_dct(UINT8_BLOCK, FLOAT_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Quantize
-    int16_t *INT16_BLOCK = malloc(sizeof(int16_t) * 64);
-    if (isY) {
-        block_quantize(LUMINANCE_QUANT, INT16_BLOCK, FLOAT_BLOCK);
-    } else {
-        block_quantize(CHROMINANCE_QUANT, INT16_BLOCK, FLOAT_BLOCK);
+
+uint8_t min_bits_abs(int16_t n) {  
+    if (n == 0) return 1;
+    n = abs(n);
+    int i;
+    uint8_t count = 0;
+    for (i = 15; i >= 0; i--) {
+        if ((n >> i) & 1) return 16 - count;
+        count++;
     }
-    block_quantize(CHROMINANCE_QUANT, INT16_BLOCK, FLOAT_BLOCK);
-    free(FLOAT_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nQuantized:\n");
-    print_i16(INT16_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    
-    // serialize
-    int16_t *INT16_SEQUENCE = malloc(sizeof(int16_t) * 64);
-    block_serialize(INT16_BLOCK, INT16_SEQUENCE, ZIGZAG_IDX);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nSequenced:\n");
-    print_i16(INT16_SEQUENCE);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-     // Inverse serialize
-    block_inv_serialize(INT16_BLOCK, INT16_SEQUENCE, ZIGZAG_IDX);
-    
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\n De-sequenced:\n");
-    print_i16(INT16_BLOCK);
-    block_serialize(INT16_BLOCK, INT16_SEQUENCE, ZIGZAG_IDX);
-    free(INT16_BLOCK);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Pack
-    blocks_pack(INT16_SEQUENCE, AC_HEAD, DC_HEAD, 1);
-    free(INT16_SEQUENCE);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    printf("\nPacked DCs:\n");
-    print_list(*DC_HEAD);
-    printf("\nPacked ACs:\n");
-    print_list(*AC_HEAD);
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    //printf("\nPrevious size: 512, new size: %ld\n", TOTAL_BITSIZE);
+    return 0;
 }
-/*
-uint16 bits_to_write
-uint16 extra_bits
-uint8 rem_bits_num
-while (node->next)
- bits_to_write = 
- extra_bits = (node -> next) ? next -> getcode(node -> next -> val) : 
- */
-// {uint8_block} -> dct -> {float_block} -> quantize -> {int8_block} -> serialize_reorder -> {int8_sequence} -> huffman -> {huffman}
+
+uint8_t min_bits_code(uint16_t n) {  
+    if (n == 0 | n == 1) return 2;
+    n = abs(n);
+    int i;
+    uint8_t count = 0;
+    for (i = 15; i >= 0; i--) {
+        if ((n >> i) & 1) return 16 - count;
+        count++;
+    }
+    return 0;
+}
+
+
+
 
 bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER) {
     /* Checks if there are any matches of any amount of crecent digits of the compare base inside the CODES provided. */
@@ -474,106 +383,4 @@ bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, 
             }
         }  
     } return false;
-}
-int DECODE_BIN_16_64(FILE *file, const uint16_t *CODES, uint8_t *MATCHES, size_t CODES_NUMBER, size_t CACHES_TO_READ) {
-    /* 
-    Reads binary file with binary data, and compares it with a list of prefix binary codes (no code is the prefix of another),
-    starting from size of 2 bits. That is, the code reads a minimum of 2 bits, but the integers correspoding to the codes 
-    can have 1 bit (integers 0 and 1), as long as they are have been encoded like "00" and "01" respectively.
-    
-    Args:
-    * file: file pointer to the binary file in "wb" mode
-    * CODES: array of ints correponding decimal interpretation of the binary codes
-    * MATCHES: output array of ints correponding to the number of times the code with the same index has been found in the file
-    * CODES_NUMBER: number of elements in CODES and MATCHES
-    * CACHES_TO_READ: number of 64 bit chunks to read from the file
-    * 
-    Returns:
-    * 0 if no error occurred, 1 if there is not enough data in the file to read anything, -1 if some non-matching sequence was found.
-    */
-    
-//  
-//                 ______________   
-//    ____________|_____________|______________   Caches are made of 64 bit integers, and a focus_block of 16 bits
-//   |            |      |      |             |   over them, reading their bites, accounting for when the focus_block 
-//   | curr_cache |      |      | next_cache  |   is contained fully inside curr_cache, and when it as slid between the
-//   |____________|______|______|_____________|   two caches. The code is executed until a number of caches has been read,
-//                | focus_block |                 or an error occured.
-//                |_____________|         
-//               
-//   |____________|
-//        dtr     
-//
-//  dtr is the displacement of the right of the focus_block from the left side of theL current_cache, 
-//  bits is the bit size of the last code read, els is the elements read from the file (whenever we do so),
-//  and caches_read is the caches read :D
-    int dtr = 0, bits = 69, caches_read = 0, els;
-
-//  create caches
-    uint64_t curr_cache, next_cache; 
-    uint16_t focus_block, deriv_block; 
-
-//  is the focus_block fully contained inside the current_cache (= slipping)?
-    bool SLIP = false;
-
-//  if no block can be read, throw error 1
-    els = fread(&curr_cache, 8, 1, file); 
-    if (els == 0) return 1;
-
-//  while we haven't read enough caches
-    while (caches_read < CACHES_TO_READ) { 
-
-//      slipping if it is displaced to the righ further than "sizeof(cache)=64 bits - sizeof(focus_block)=16 bits
-        SLIP =  dtr > 48; 
-
-//      if focus_block is slipping, special course of action
-        if (SLIP) {
-
-//          try to read next cache into next_cache (smart name)
-            els = fread(&next_cache, 8, 1, file);
-
-//          if no further caches can be read, then we set the next_cache to 0, and that works for us
-            if (els == 0) next_cache = 0;
-            while(SLIP) {             
-
-//              get the focus_block combining both caches    2x64 -16 - dtr                  dtr + 64 - 16
-                focus_block = 0; focus_block |= (next_cache >> (112 - dtr)) | (curr_cache << (dtr - 48));
-
-//              search for matches inside the provided codes, return -1 if no match is found, add the bits of 
-//              code read to the displacement
-                if (!search_codes(focus_block, CODES, &bits, MATCHES, CODES_NUMBER)) return -1; dtr += bits;
-
-//              now slip is true while we are slipping, and it stops when the whole focus block slid through to 
-//              the next cache
-                SLIP = dtr < 64;
-
-//          when the block has slid through, we either return 0 if it was the last cache, or we go on and take
-//          the next_cache as our new curr_cache
-            } if (els == 0) return 0; curr_cache = next_cache; caches_read++; dtr = 0;
-
-//      if focus_block is not slipping, we  proceed as usual and read the focus block entirely from curr_cache
-        } else {                
-            
-//          get focus_block by trimming curr_cache     64 - 16 -dtr
-            focus_block = 0; focus_block |= curr_cache >> (48 - dtr);
-
-//          search for matches inside the provided codes, return -1 if no match is found, add the bits of 
-//          code read to the displacement
-            if (!search_codes(focus_block, CODES, &bits, MATCHES, CODES_NUMBER)) return -1; dtr += bits;   
-        }
-    } 
-
-//  easy
-    return 0;
-}
-void blocks_encode(FILE* file, DATA_NODE *AC_DATA_NODES, DATA_NODE *DC_DATA_NODES,
-    const uint16_t *DC_NEWCODES, const uint16_t *DC_OLDCODES, const uint16_t *AC_NEWCODES, const uint16_t *AC_OLDCODES,
-    size_t BLOCK_NUMBER, size_t CODES_NUMBER) {
-    
-    
-
-
-    
-
-    
 }

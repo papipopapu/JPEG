@@ -23,13 +23,11 @@ void INSTREAM_reset_bytes(INSTREAM *in) {
         
 }
 
-int OUTSTREAM_push(OUTSTREAM *out, uint32_t data, int bits) {
+int OUTSTREAM_push(OUTSTREAM *out, uint16_t data, int bits) {
     // bits are the number of bits to encode from least to most significant
     if (bits < 1 || bits > 32) return 1;
-    if (out->eof) return -1;
-    data &= (bits == 32) ? ~0 : (1 << bits) - 1; // remove trash data, but if whole int is needed, we cant bitshift by 0
+    data &= (bits == 16) ? ~0 : (1 << bits) - 1; // remove trash data, but if whole int is needed, we cant bitshift by 0
     int slip = bits + out->written_bits - 8;  
-
     if (slip > 0) {
         out->buffer[out->written_bytes] |= data >> +slip;   
         OUTSTREAM_reset_bytes(out);
@@ -43,10 +41,10 @@ int OUTSTREAM_push(OUTSTREAM *out, uint32_t data, int bits) {
     } 
     return 0;
 }
-int INSTREAM_pull(INSTREAM *in, uint32_t *data, int bits) { // pointer to uint, not array of uints
+int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits) { // pointer to uint, not array of uints
     
     // please set data t 0 to avoid garbage data
-    if (bits < 1 | bits > 32) return 1;
+    if (bits < 1 | bits > 16) return 1;
     if (in->eof) return -1;
     uint32_t curated = in->buffer[in->read_bytes] & ((1 << 8) - 1); // remove trash data, but if whole int is needed, we cant bitshift by 0);
     curated &= (in->read_bits == 0) ? ~0 : (1 << in->read_bits) - 1;
@@ -70,8 +68,6 @@ OUTSTREAM *new_OUTSTREAM(const char* filename, int buffer_bytes) {
     out->filename = filename;
     out->file = fopen(filename, "wb");
     out->written_bits = 0;
-    out->written_bytes = 0;
-    out->eof = false;
     out->buffer_bytes = buffer_bytes;
     out->buffer = calloc(buffer_bytes, 1); 
     //if (fread(out->buffer, 1, buffer_bytes, out->file)==0) {fclose(out->file); free(out); return NULL;}
@@ -94,10 +90,10 @@ INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes) {
 
 int delete_OUTSTREAM(OUTSTREAM *out) {
     if (out == NULL) return -1;
-    if (out->written_bits != 0 | out->written_bytes!=0) fwrite(out->buffer, 1, out->written_bytes, out->file); // flush buffer if something has been written
+    if (out->written_bits != 0 | out->written_bytes != 0) fwrite(out->buffer, 1, max(out->written_bytes, 1), out->file); // flush buffer if something has been written
     fclose(out->file);
     free(out->buffer);
-    free((void*)out);
+    free(out);
     return 0;
 }
 int delete_INSTREAM(INSTREAM *in) {
