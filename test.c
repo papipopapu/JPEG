@@ -10,37 +10,43 @@ const uint16_t codes[] = {
 65420,
 };
 
-void print_bits_uint16(uint16_t n)
-{
-    int i;
-    for (i = 15; i >= 0; i--) {
-        printf("%d", (n >> i) & 1);
-    }
-}
+
 
 
 int main () {
     
     //printf("Test basic use, writing [1101010], [1111], [0], [110101001] into a cache of 3 bytes.\n Then reading 16 bytes as [1101010111101101].\n");
 
-    OUTSTREAM *out = new_OUTSTREAM("test.bin", 2);  
-    pushto_OUTSTREAM(out, 0b000000001111000011111111, 24);
-                       
+    OUTSTREAM *out = new_OUTSTREAM("test.bin", 1);  
+    OUTSTREAM_push(out, 0b110000011111000011111111, 24);             
     delete_OUTSTREAM(out);
 
-    FILE * file = fopen("test.bin", "rb");
-    char *num = (char *)malloc(3);
-    printf("Els read: %lu\n",fread(num, 1, 3, file));
-
-    printf("Extract all: \n");
+    FILE *file = fopen("test.bin", "rb");
+    uint8_t *truth = malloc(sizeof(uint8_t)*3);
+    fread(truth, 1, 3, file);
     for (int i = 0; i < 3; i++) {
-        print_ubits((uint8_t)num[i]);
+        print_ubits(truth[i]);
     }
     printf("\n");
-
-    free(num);
     fclose(file);
+    free(truth);
 
+    
+    uint32_t num = 0;
+    INSTREAM *in = new_INSTREAM("test.bin", 1);
+    if (!in) {
+        printf("Error: could not open file.\n");
+        return 1;
+    }
+    INSTREAM_pull(in, &num, 9);
+    delete_INSTREAM(in);
+
+
+    printf("Read: %d\n", num);
+
+
+
+ 
 
 
 

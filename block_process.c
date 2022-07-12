@@ -343,6 +343,16 @@ void print_16bits(int16_t n)
         printf("%d", (n >> i) & 1);
     }
 }
+void print_32bits(uint32_t n)
+{
+    int i;
+    for (i = 31; i >= 0; i--) {
+        printf("%d", (n >> i) & 1);
+    }
+}
+void dummie() {
+    printf("dummie\n");
+}
 void print_list(DATA_NODE* head)
 {
     DATA_NODE* curr = head;

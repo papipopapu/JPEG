@@ -43,18 +43,12 @@ typedef struct OUTSTREAM {
 typedef struct INSTREAM {
     const char* filename;
     FILE *file;
-    int written_bits, written_bytes, buffer_bytes;
+    int read_bits, read_bytes, buffer_bytes;
     // written means alredy written ~ dtr
     char *buffer;
     bool eof;
 } INSTREAM;
-typedef struct DECODER {
-    const char* filename;
-    FILE *file;
-    int dtr;
-    uint32_t curr_cache, next_cache;
-    bool end_of_file;
-} DECODER;
+
 
 DATA_NODE *new_DATA_NODE();
 void free_DATA_NODE_list(DATA_NODE* head);
@@ -98,10 +92,18 @@ int ENCODE_DATA(const char* filename, DATA_NODE *NODES, const uint16_t *CODES, c
 
 
 
-int pushto_OUTSTREAM(OUTSTREAM *out, uint data, int bits);
+int OUTSTREAM_push(OUTSTREAM *out, uint32_t data, int bits);
+void OUTSTREAM_reset_bytes(OUTSTREAM *out);
 OUTSTREAM *new_OUTSTREAM(const char* filename, int buffer_bytes);
 int delete_OUTSTREAM(OUTSTREAM *out);
 
+int INSTREAM_pull(INSTREAM *in, uint32_t *data, int bits);
+void INSTREAM_reset_bytes(INSTREAM *in);
+INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes);
+int delete_INSTREAM(INSTREAM *in);
+
+void print_32bits(uint32_t data);
+void dummie();
 
 
 void print_ubits(uint8_t n);
