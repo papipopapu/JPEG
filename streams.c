@@ -44,7 +44,7 @@ int OUTSTREAM_push(OUTSTREAM *out, uint16_t data, int bits) {
 int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits) { // pointer to uint, not array of uints
     
     // please set data t 0 to avoid garbage data
-    if (bits < 1 | bits > 16) return 1;
+    if (bits < 1 || bits > 16) return 1;
     if (in->eof) return -1;
     uint32_t curated = in->buffer[in->read_bytes] & ((1 << 8) - 1); // remove trash data, but if whole int is needed, we cant bitshift by 0);
     curated &= (in->read_bits == 0) ? ~0 : (1 << in->read_bits) - 1;
@@ -90,7 +90,7 @@ INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes) {
 
 int delete_OUTSTREAM(OUTSTREAM *out) {
     if (out == NULL) return -1;
-    if (out->written_bits != 0 | out->written_bytes != 0) fwrite(out->buffer, 1, max(out->written_bytes, 1), out->file); // flush buffer if something has been written
+    if (out->written_bits != 0 || out->written_bytes != 0) fwrite(out->buffer, 1, max(out->written_bytes, 1), out->file); // flush buffer if something has been written
     fclose(out->file);
     free(out->buffer);
     free(out);

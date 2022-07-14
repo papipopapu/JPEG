@@ -86,7 +86,7 @@ int min_bits_abs(int16_t n);
 int min_bits_code(uint16_t n);
 
 // coders
-bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER);
+bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
 bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
 void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two);
 
@@ -105,6 +105,8 @@ int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits);
 void INSTREAM_reset_bytes(INSTREAM *in);
 INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes);
 int delete_INSTREAM(INSTREAM *in);
+
+void decode_data(INSTREAM *in, uint8_t rrrrssss, int *zeros, int16_t *val);
 
 void print_32bits(uint32_t data);
 void print_16bits(int16_t data);

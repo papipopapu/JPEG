@@ -288,20 +288,35 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
 
         }
     }
-    DATA_PACKET_pack(&data, val, zeros);
-    if (!DATA_PACKET_encode(&data, AC_CODES, AC_VALUES, 162)) return -1;
-    OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
-    OUTSTREAM_push(out, data.VAL, data.VAL_bits);
-
-    printf("//////////////////////////////////////////////////////////////////\n");
-    printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
-    printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
-    printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
+    
+    printf("//////////////////////////////////////////////////////////////////e\n");
+    printf("eob\n");
 
     OUTSTREAM_push(out, 0, 8);
+    return 0;
 }
 
+int block_decode(INSTREAM* in, int16_t *INT16_SEQUENCE, int16_t* PREV_DC,
+ const uint16_t *DC_CODES, const uint8_t *DC_VALUES,
+ const uint16_t *AC_CODES, const uint8_t *AC_VALUES) {
 
+    uint16_t val;
+    uint8_t rrrrssss;
+    int rrrr, ssss, idx=0;
+    bool eob = false;
+
+    search_codes(in, &rrrrssss, DC_CODES, DC_VALUES, 12);
+    decode_data(in, rrrrssss, &ssss, &rrrr, &val);
+    if (rrrr != 0) return -1; // some integrity checking, non dc read (run != 0)
+    write_data(INT16_SEQUENCE, true, &idx, 0, rrrr, val);
+
+    while (!eob && idx < 64) {
+        search_codes(in, &rrrrssss, DC_CODES, DC_VALUES, 12);
+        decode_data(in, rrrrssss, &ssss, &rrrr, &val);
+        eob = write_data(INT16_SEQUENCE, false, &idx, ssss, rrrr, val);
+    }
+    return eob ? 0 : 1;
+}
 //////////////////////////
 
 
@@ -370,7 +385,7 @@ int min_bits_abs(int16_t n) {
 }
 
 int min_bits_code(uint16_t n) {  
-    if (n == 0 | n == 1) return 2;
+    if (n == 0 || n == 1) return 2;
     int i, count = 0;
     for (i = 15; i >= 0; i--) {
         if ((n >> i) & 1) return 16 - count;
@@ -381,19 +396,60 @@ int min_bits_code(uint16_t n) {
 
 
 
-
-bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER) {
+bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER) {
     /* Checks if there are any matches of any amount of crecent digits of the compare base inside the CODES provided. */
-    int k; *bits_read = 1; // we are goind to read at least 2 digits
-    uint16_t compare_deriv;
-    while ((*bits_read) <= 16) { // while we are not at the end of the group in focus and we haven't found the code
-        (*bits_read)++; 
-        compare_deriv = compare_base >> (16 - *bits_read); // read progressibely more digits of the code
-        for (k=0; k < CODES_NUMBER; k++) { // check if code exists in our list
-            if (compare_deriv == CODES[k]) {
-                MATCHES[k]++;
+    int bits = 2, i;
+    uint16_t code = 0, pull = 0;
+    INSTREAM_pull(in, &code, 2);
+    while(bits < 16) {
+        for (i = 0; i < CODES_NUMBER; i++) {
+            if (code == CODES[i]) {
+                *rrrrssss = VALUES[i];
                 return true;
             }
-        }  
-    } return false;
+        }
+        INSTREAM_pull(in, &pull, 1);
+        code = (code << 1) | pull;
+        bits++;
+    }
+    return false;
+}
+
+void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t *val) {
+    /* Decodes the data packet. */
+    *rrrr = rrrrssss >> 4;
+    *ssss = rrrrssss & 0b1111;
+    *val = 0; INSTREAM_pull(in, val, *ssss);
+
+}
+
+bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int *idx, int ssss, int rrrr, uint16_t val) {
+    // check if eob
+    if (!is_dc && rrrr == 0 && ssss == 0) {
+        INT16_SEQUENCE[*idx] = val;
+        *idx += 1;
+        return true;
+    }
+
+    // write zeros
+    for (int i = 0; i < rrrr; i++) {INT16_SEQUENCE[i+*idx] = 0;}
+
+    // then, we write the value
+
+    // special cases
+    if (ssss == 0) {INT16_SEQUENCE[*idx+rrrr] = 0; *idx += (rrrr + 1); return false;}
+    if (ssss == 1) {INT16_SEQUENCE[*idx+rrrr] = (val == 1) ? -1 : 1; *idx += (rrrr + 1); return false;}
+
+    // normal cases
+    int i; bool is_neg; int16_t true_val;
+    is_neg = (val & (1 << (ssss - 1))) != 0; // check sign bit
+    val |= (1 << (ssss - 1)); // add the missing 1
+    if (is_neg) {true_val = -val;} else {true_val = val;}
+    *idx += (rrrr + 1);
+    return false;
+ 
+
+
+
+
 }

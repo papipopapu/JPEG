@@ -33,7 +33,7 @@ int main() {
     print_matrix(sequence);
 
     OUTSTREAM *out = new_OUTSTREAM("out.txt", 8);
-    block_encode(out, sequence, 0, DC_LUMINANCE_CODES, DC_VALUES, AC_LUMINANCE_CODES, AC_VALUES);
+    printf("Result: %d", block_encode(out, sequence, 0, DC_LUMINANCE_CODES, DC_VALUES, AC_LUMINANCE_CODES, AC_VALUES));
     delete_OUTSTREAM(out);
 
     
