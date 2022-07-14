@@ -223,58 +223,81 @@ void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const ui
 }
 
 void DATA_PACKET_pack(DATA_PACKET *data, int16_t VAL, uint8_t zeros) {
-    uint8_t is_neg = 0, min_bits; 
+    uint8_t is_neg = 0; 
+    int min_bits; 
     if (VAL < 0) {VAL = -VAL;  is_neg = 1;}
     min_bits = (VAL == 0) ? 0 : min_bits_abs(VAL);
-    data -> rrrrssss = zeros; // number of previous zeros
-    data -> rrrrssss <<= 4; // shift to the left 4 bits
-    data -> rrrrssss |= min_bits; // add on the other side the minimum bits to represent VAL - 1 (even though we know
-    // we have eliminated the first bit, so bits = 1 -> 1, bits = 0 -> 0))
+    data -> rrrrssss = zeros; 
+    data -> rrrrssss <<= 4; 
+    data -> rrrrssss |= min_bits; 
     data -> VAL = VAL;
-    data -> VAL &= (1 << (min_bits-1))-1; // mask off the bits that are not needed
-    data -> VAL |= is_neg << min_bits; // add the sign bit
+    data -> VAL &= (1 << (min_bits-1))-1; 
+    data -> VAL |= is_neg << (min_bits-1); 
     data -> VAL_bits = min_bits;
+    
+    // 0 size -> read 0 (val ~+-0      ) -> { read 0-1  (+) append sign bit } absurd, we know its 0 
+    // 1 size -> read 1 (val ~+-1      ) -> { read 1-1  (+) append sign bit }
+    // ...
+    // n size -> read n (val ~+-2^(n-1)) -> { read n-1  (+) append sign bit }
+
 }
 
-bool DATA_PACKET_encode(DATA_PACKET *data, uint16_t *code, const uint16_t *CODES, const uint8_t *VALUES, size_t N_CODES) {
+bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t *VALUES, size_t N_CODES) {
     int i;
     for (i = 0; i < N_CODES; i++) {
         if (VALUES[i] == data -> rrrrssss) {
             data -> rs_code = CODES[i];
+            data -> rs_code_bits = min_bits_code(data -> rs_code);
             return true;
         }
     }
     return false;
 }
 
-int block_encode(OUTSTREAM* out, const char *filename, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
+int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES,
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES) {
-
+    int i, zeros = 0; int16_t val = INT16_SEQUENCE[0];
     DATA_PACKET data;
-    DATA_PACKET_pack(&data, INT16_SEQUENCE[0] - PREV_DC, 0);
-    if (!DATA_PACKET_encode(&data, &data.rs_code, DC_CODES, DC_VALUES, 12)) return -1;
-    OUTSTREAM_push(out, data.rs_code, min_bits_code(data.rs_code));
+    DATA_PACKET_pack(&data, val - PREV_DC, 0);
+    if (!DATA_PACKET_encode(&data, DC_CODES, DC_VALUES, 12)) return -1;
+    OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
     OUTSTREAM_push(out, data.VAL, data.VAL_bits);
-    int i, zeros = 0; int16_t val = 0;
+
+    printf("//////////////////////////////////////////////////////////////////\n");
+    printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
+    printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
+    printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
+
+
+    
     for (i = 1; i < 64; i++) {
         val = INT16_SEQUENCE[i];
-        if (val == 0) {
+        if (val == 0 && zeros < 16) {
             zeros++;
-            if (zeros == 16) {
-                DATA_PACKET_pack(&data, 0, 16);
-                if (!DATA_PACKET_encode(&data, &data.rs_code, AC_CODES, AC_VALUES, 162)) return -1;
-                OUTSTREAM_push(out, data.rs_code, min_bits_code(data.rs_code));
-                zeros = 0;
-            }
         } else {
             DATA_PACKET_pack(&data, val, zeros);
-            if (!DATA_PACKET_encode(&data, &data.rs_code, AC_CODES, AC_VALUES, 162)) return -1;
-            OUTSTREAM_push(out, data.rs_code, min_bits_code(data.rs_code));
+            if (!DATA_PACKET_encode(&data, AC_CODES, AC_VALUES, 162)) return -1;
+            OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
             OUTSTREAM_push(out, data.VAL, data.VAL_bits);
             zeros = 0;
+    printf("//////////////////////////////////////////////////////////////////\n");
+    printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
+    printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
+    printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
+
         }
     }
+    DATA_PACKET_pack(&data, val, zeros);
+    if (!DATA_PACKET_encode(&data, AC_CODES, AC_VALUES, 162)) return -1;
+    OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
+    OUTSTREAM_push(out, data.VAL, data.VAL_bits);
+
+    printf("//////////////////////////////////////////////////////////////////\n");
+    printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
+    printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
+    printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
+
     OUTSTREAM_push(out, 0, 8);
 }
 
@@ -282,15 +305,7 @@ int block_encode(OUTSTREAM* out, const char *filename, int16_t *INT16_SEQUENCE, 
 //////////////////////////
 
 
-void print_i16(int16_t *matrix) {
-    int i, j;
-    for (i = 0; i < 8; i++) {
-        for (j = 0; j < 8; j++) {
-            printf("%d ", matrix[i * 8 + j]);
-        }
-        printf("\n");
-    }
-}
+
 void print_f(float *matrix) {
     int i, j;
     for (i = 0; i < 8; i++) {
@@ -342,11 +357,11 @@ uint8_t min_bits(uint16_t n) {
     return 0;
 }
 
-uint8_t min_bits_abs(int16_t n) {  
+int min_bits_abs(int16_t n) {  
     if (n == 0) return 1;
-    n = abs(n);
+    n = (n<0) ? -n : n;
     int i;
-    uint8_t count = 0;
+    int count = 0;
     for (i = 15; i >= 0; i--) {
         if ((n >> i) & 1) return 16 - count;
         count++;
@@ -354,11 +369,9 @@ uint8_t min_bits_abs(int16_t n) {
     return 0;
 }
 
-uint8_t min_bits_code(uint16_t n) {  
+int min_bits_code(uint16_t n) {  
     if (n == 0 | n == 1) return 2;
-    n = abs(n);
-    int i;
-    uint8_t count = 0;
+    int i, count = 0;
     for (i = 15; i >= 0; i--) {
         if ((n >> i) & 1) return 16 - count;
         count++;
