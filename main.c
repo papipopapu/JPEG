@@ -1,6 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "image_compression.h"
+void print_matrix(int16_t *seq) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            printf("%d ", seq[i*8+j]);
+        }
+        printf("\n");
+    }
+}
 int main() {
     
     size_t n = 8, m = 8;
@@ -15,20 +23,24 @@ int main() {
         87, 79, 69, 68, 65, 76, 78, 94
     };
 
-    u_int8_t max_block[64];
-    max_block[0] = 0;
-    for (int k=1; k<64; k++) {
-        max_block[k] = max_block[k-1] + 1;
-    }
+    int16_t sequence[64];
+    float float_block[64];
+    int16_t int16_block[64];
 
-    int16_t h[64];
-    u_int8_t aprox_block[n*m];
-    get_block(max_block, aprox_block, 8, 8, 0, 0);
+    block_dct(uint8_block, float_block);
+    block_quantize(LUMINANCE_QUANT , int16_block, float_block );
+    block_serialize(int16_block, sequence,  ZIGZAG_IDX);
+    print_matrix(sequence);
+
+    OUTSTREAM *out = new_OUTSTREAM("out.txt", 8);
+    block_encode(out, sequence, 0, DC_LUMINANCE_CODES, DC_VALUES, AC_LUMINANCE_CODES, AC_VALUES);
+    delete_OUTSTREAM(out);
+
+    
+    //printf("VAL_bits: "); print_ubits(test.VAL_bits); printf("\n");
 
 
-    DATA_NODE* AC = new_DATA_NODE();  DATA_NODE* DC = new_DATA_NODE();
-    block_process_one(true, aprox_block, &AC, &DC);
-    free_DATA_NODE_list(AC); free_DATA_NODE_list(DC);
+
 
     /*
     this seg-faults:

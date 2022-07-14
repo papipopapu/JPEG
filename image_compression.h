@@ -23,7 +23,7 @@
 extern const float LUMINANCE_QUANT[64];
 extern const float CHROMINANCE_QUANT[64];
 extern const uint8_t ZIGZAG_IDX[64];
-extern const uint16_t AC_LUMINANCE_HCODES[162];
+extern const uint16_t AC_LUMINANCE_CODES[162];
 extern const uint16_t AC_CHROMINANCE_CODES[162];
 extern const uint8_t AC_VALUES[162];
 extern const uint16_t DC_LUMINANCE_CODES[12];
@@ -36,7 +36,7 @@ typedef struct DATA_PACKET {
     uint8_t rrrrssss; // packed here
     uint16_t rs_code;
     uint16_t VAL; // prob less than 16 bits, min bits will be packed and then recasted to an int16 to be interpreted
-    int VAL_bits;
+    int VAL_bits, rs_code_bits;
 
 } DATA_PACKET;
 typedef struct OUTSTREAM {
@@ -77,14 +77,22 @@ void block_inv_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLO
 void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 
+int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
+ const uint16_t *DC_CODES, const uint8_t *DC_VALUES,
+ const uint16_t *AC_CODES, const uint8_t *AC_VALUES);
+
 uint8_t min_bits(uint16_t n);
-uint8_t min_bits_abs(int16_t n);
-uint8_t min_bits_code(uint16_t n);
+int min_bits_abs(int16_t n);
+int min_bits_code(uint16_t n);
 
 // coders
 bool search_codes(uint16_t compare_base, const uint16_t *CODES, int *bits_read, uint8_t *MATCHES, size_t CODES_NUMBER);
 bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
 void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two);
+
+void DATA_PACKET_pack(DATA_PACKET *data, int16_t VAL, uint8_t zeros);
+bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t *VALUES, size_t N_CODES);
+
 
 
 
@@ -99,7 +107,9 @@ INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes);
 int delete_INSTREAM(INSTREAM *in);
 
 void print_32bits(uint32_t data);
-void dummie();
+void print_16bits(int16_t data);
+
+
 
 
 void print_ubits(uint8_t n);
