@@ -24,10 +24,14 @@ extern const float LUMINANCE_QUANT[64];
 extern const float CHROMINANCE_QUANT[64];
 extern const uint8_t ZIGZAG_IDX[64];
 extern const uint16_t AC_LUMINANCE_CODES[162];
+extern const uint8_t AC_LUMINANCE_LENGTHS[162];
 extern const uint16_t AC_CHROMINANCE_CODES[162];
+extern const uint8_t AC_CHROMINANCE_LENGTHS[162];
 extern const uint8_t AC_VALUES[162];
 extern const uint16_t DC_LUMINANCE_CODES[12];
+extern const uint8_t DC_LUMINANCE_LENGTHS[12];
 extern const uint16_t DC_CHROMINANCE_CODES[12];
+extern const uint8_t DC_LUMINANCE_LENGTHS[12];
 extern const uint8_t DC_VALUES[12];
 
 // data_node
@@ -78,20 +82,20 @@ void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_
 void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 
 int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
- const uint16_t *DC_CODES, const uint8_t *DC_VALUES,
- const uint16_t *AC_CODES, const uint8_t *AC_VALUES);
+ const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS,
+ const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS);
 
 uint8_t min_bits(uint16_t n);
 int min_bits_abs(int16_t n);
 int min_bits_code(uint16_t n);
 
 // coders
-bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
+bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, const uint8_t *LENGTHS, size_t CODES_NUMBER);
 bool get_code(uint16_t *code, uint8_t rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, size_t CODES_NUMBER);
 void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, int *dtr, bool min_two);
 
 void DATA_PACKET_pack(DATA_PACKET *data, int16_t VAL, uint8_t zeros);
-bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t *VALUES, size_t N_CODES);
+bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t *VALUES, const uint8_t *LENGTHS, size_t N_CODES);
 
 
 
@@ -106,7 +110,11 @@ void INSTREAM_reset_bytes(INSTREAM *in);
 INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes);
 int delete_INSTREAM(INSTREAM *in);
 
-void decode_data(INSTREAM *in, uint8_t rrrrssss, int *zeros, int16_t *val);
+int block_decode(INSTREAM* in, int16_t *INT16_SEQUENCE, int16_t* PREV_DC,
+ const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS,
+ const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS);
+void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t *val);
+bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int idx, int ssss, int rrrr, uint16_t val);
 
 void print_32bits(uint32_t data);
 void print_16bits(int16_t data);

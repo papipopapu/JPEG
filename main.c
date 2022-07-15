@@ -12,6 +12,7 @@ void print_matrix(int16_t *seq) {
 int main() {
     
     size_t n = 8, m = 8;
+    int16_t prev_dc = 0;
     u_int8_t uint8_block[64] = {
         52, 55, 61, 66, 70, 61, 64, 73,
         63, 59, 55, 90, 109, 85, 69, 72, 
@@ -26,6 +27,7 @@ int main() {
     int16_t sequence[64];
     float float_block[64];
     int16_t int16_block[64];
+    int16_t import_block[64];
 
     block_dct(uint8_block, float_block);
     block_quantize(LUMINANCE_QUANT , int16_block, float_block );
@@ -33,9 +35,14 @@ int main() {
     print_matrix(sequence);
 
     OUTSTREAM *out = new_OUTSTREAM("out.txt", 8);
-    printf("Result: %d", block_encode(out, sequence, 0, DC_LUMINANCE_CODES, DC_VALUES, AC_LUMINANCE_CODES, AC_VALUES));
+    printf("Result: %d\n", block_encode(out, sequence, 0, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
     delete_OUTSTREAM(out);
 
+    INSTREAM* in = new_INSTREAM("out.txt", 8);
+    printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
+    delete_INSTREAM(in);
+
+    print_matrix(import_block);
     
     //printf("VAL_bits: "); print_ubits(test.VAL_bits); printf("\n");
 

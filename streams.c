@@ -42,12 +42,19 @@ int OUTSTREAM_push(OUTSTREAM *out, uint16_t data, int bits) {
     return 0;
 }
 int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits) { // pointer to uint, not array of uints
-    
+    // print buffer
+    /*printf("Buffer: \n");
+    for (int i = 0; i < in->buffer_bytes; i++) {
+        print_ubits(in->buffer[i]); printf("\n");
+    }*/
     // please set data t 0 to avoid garbage data
     if (bits < 1 || bits > 16) return 1;
     if (in->eof) return -1;
-    uint32_t curated = in->buffer[in->read_bytes] & ((1 << 8) - 1); // remove trash data, but if whole int is needed, we cant bitshift by 0);
-    curated &= (in->read_bits == 0) ? ~0 : (1 << in->read_bits) - 1;
+    uint16_t curated = 0;
+    curated |= in->buffer[in->read_bytes];
+    curated &= in->read_bits == 0 ? 0b11111111 : ((1<<(8-in->read_bits))-1); // remove trash data, but if whole int is needed, we cant bitshift by 0);
+    //curated &= (in->read_bits == 0) ? ~0 : (1 << in->read_bits) - 1;
+    //printf("Bitn: %d, Curated: ", bits); print_16bits(curated); printf("\n");
     int slip = bits + in->read_bits - 8;
     if (slip > 0) {
         *data |= curated << +slip;
@@ -58,6 +65,7 @@ int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits) { // pointer to uint, 
         in->read_bits += bits;
     } else if (slip == 0){
         *data |= curated;
+        //printf("Pulled from inside: %d\n, bits=", *data); print_16bits(*data); printf("\n");
         INSTREAM_reset_bytes(in);
     }
     return 0;
