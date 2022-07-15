@@ -32,7 +32,7 @@ int main() {
     block_dct(uint8_block, float_block);
     block_quantize(LUMINANCE_QUANT , int16_block, float_block );
     block_serialize(int16_block, sequence,  ZIGZAG_IDX);
-    print_matrix(sequence);
+    
 
     OUTSTREAM *out = new_OUTSTREAM("out.txt", 8);
     printf("Result: %d\n", block_encode(out, sequence, 0, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
@@ -43,6 +43,8 @@ int main() {
     delete_INSTREAM(in);
 
     print_matrix(import_block);
+    printf("\n");
+    print_matrix(sequence);
     
     //printf("VAL_bits: "); print_ubits(test.VAL_bits); printf("\n");
 

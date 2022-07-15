@@ -105,6 +105,7 @@ void OUTSTREAM_reset_bytes(OUTSTREAM *out);
 OUTSTREAM *new_OUTSTREAM(const char* filename, int buffer_bytes);
 int delete_OUTSTREAM(OUTSTREAM *out);
 
+int INSTREAM_pull_1bit(INSTREAM *in);
 int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits);
 void INSTREAM_reset_bytes(INSTREAM *in);
 INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes);
