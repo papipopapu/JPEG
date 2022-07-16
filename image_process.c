@@ -1,12 +1,5 @@
 #include "image_compression.h"
-void print_block(uint8_t *block) {
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            printf("%u ", block[i*8+j]);
-        }
-        printf("\n");
-    }
-}
+
 RGB_IMAGE *new_RGB_IMAGE(uint16_t width, uint16_t height) {
     RGB_IMAGE *img = malloc(sizeof(RGB_IMAGE));
     img->WIDTH = width;
@@ -22,10 +15,10 @@ void delete_RGB_IMAGE(RGB_IMAGE *img) {
     free(img->b);
     free(img);
 }
-void downsample_420(RGB_IMAGE *img) { // must be ycbcr
-    for (int i = 0; i < img->HEIGHT*img->WIDTH; i++) {
-        img->g[i] = 2*round(img->g[i]/2.0);
-        img->b[i] = 2*round(img->b[i]/2.0);
+void downsample_420(uint8_t * Cb, uint8_t *Cr, size_t N) { // must be ycbcr
+    for (int i = 0; i < N; i++) {
+        Cb[i] = 2*round(Cb[i]/2.0);
+        Cr[i] = 2*round(Cr[i]/2.0);
     }
 }
 
@@ -95,20 +88,16 @@ int encode_slice(OUTSTREAM *out, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT
     free(block); free(sequence); free(int16_block); free(float_block);
     return 0;
 }
-int encode_image(char* filename, RGB_IMAGE *image) {
-    if (image == NULL || filename == NULL || strlen(filename) == 0 || image->WIDTH == 0 || image->HEIGHT == 0) {
-        printf("Error in arguments provided\n");
-        return -1;
-    }
+int encode_image(char *filename, uint8_t *r, uint8_t *g, uint8_t *b,  uint16_t width, uint16_t height) {
     OUTSTREAM *out = new_OUTSTREAM(filename, 8);
-    OUTSTREAM_push(out, image->WIDTH, 16); OUTSTREAM_push(out, image->HEIGHT, 16);
-    image_rgb_to_yCbCr(image->r, image->g, image->b);
-    downsample_420(image);
+    OUTSTREAM_push(out, width, 16); OUTSTREAM_push(out, height, 16);
+    image_rgb_to_yCbCr(r, g, b);
+    downsample_420(g, b, width * height);
     // r = y, g = Cb, b = Cr
     // downsample
-    encode_slice(out, image->r, image->WIDTH, image->HEIGHT, true);
-    encode_slice(out, image->g, image->WIDTH, image->HEIGHT, false);
-    encode_slice(out, image->b, image->WIDTH, image->HEIGHT, false);
+    encode_slice(out, r, width, height, true);
+    encode_slice(out, g, width, height, false);
+    encode_slice(out, b, width, height, false);
     delete_OUTSTREAM(out);
     return 0;
 }
@@ -140,18 +129,24 @@ int decode_slice(INSTREAM *in, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, 
     free(block); free(sequence); free(int16_block); free(float_block);
     return 0;
 }
-int decode_image(char* filename, RGB_IMAGE* image) {
+int decode_image(char *filename, uint8_t **r, uint8_t **g, uint8_t **b, uint16_t *width, uint16_t *height) {
     if (filename == NULL || strlen(filename) == 0){
         printf("Error in arguments provided\n");
         return -1;
     }
+    
     INSTREAM *in = new_INSTREAM(filename, 8);
-    INSTREAM_pull(in, &image->WIDTH, 16); INSTREAM_pull(in, &image->HEIGHT, 16);
+    INSTREAM_pull(in, width, 16); INSTREAM_pull(in, height, 16);
 
-    decode_slice(in, image->r, image->WIDTH, image->HEIGHT, true);
-    decode_slice(in, image->g, image->WIDTH, image->HEIGHT, false);
-    decode_slice(in, image->b, image->WIDTH, image->HEIGHT, false);
-    image_yCbCr_to_rgb(image->r, image->g, image->b);
+    *r = malloc(sizeof(uint8_t) * (*width) * (*height));
+    *g = malloc(sizeof(uint8_t) * (*width) * (*height));
+    *b = malloc(sizeof(uint8_t) * (*width) * (*height));
+
+    decode_slice(in, *r, *width, *height, true);
+    decode_slice(in, *g, *width, *height, false);
+    decode_slice(in, *b, *width, *height, false);
+    image_yCbCr_to_rgb(*r, *g, *b);
     delete_INSTREAM(in);
     return 0;
 }
+

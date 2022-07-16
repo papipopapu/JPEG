@@ -1,7 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "image_compression.h"
+#include <time.h>
 
+
+#include "image_compression.h"
+void print_block(uint8_t *block) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            printf("%u ", block[i*8+j]);
+        }
+        printf("\n");
+    }
+}
 void print_RGB_IMAGE(RGB_IMAGE *img) {
     printf("R:\n");
     for (int i = 0; i < img->HEIGHT; i++) {
@@ -41,18 +51,45 @@ int main() {
         85, 71, 64, 59, 55, 61, 65, 83,
         87, 79, 69, 68, 65, 76, 78, 94
     };
-    RGB_IMAGE *img = new_RGB_IMAGE(8, 8); 
-    RGB_IMAGE *img_out = new_RGB_IMAGE(8, 8);
-    memcpy(img->r, uint8_block, sizeof(uint8_t) * 64);
-    memcpy(img->g, uint8_block, sizeof(uint8_t) * 64);
-    memcpy(img->b, uint8_block, sizeof(uint8_t) * 64);
+    uint16_t w,h;
+    uint8_t *rin, *gin, *bin, 
+    *rout = malloc(sizeof(uint8_t)*64),
+    *gout = malloc(sizeof(uint8_t)*64), 
+    *bout = malloc(sizeof(uint8_t)*64);
 
-    encode_image("test.bin", img);
-    decode_image("test.bin", img_out);
 
-    print_RGB_IMAGE(img);
-    print_RGB_IMAGE(img_out);
 
+    for (int i = 0; i < 64; i++) {
+        rout[i] = rand();
+    }
+
+    for (int i = 0; i < 64; i++) {
+        gout[i] = rand();
+    }
+    // fill bin array with random values
+    for (int i = 0; i < 64; i++) {
+        bout[i] = rand();
+    }
+
+    printf("R:\n");
+    print_block(rout); 
+    printf("G:\n");
+    print_block(gout);
+    printf("B:\n");
+    print_block(bout);
+
+
+    encode_image("img.bin", rout, gout, bout, 8, 8);
+    decode_image("img.bin", &rin, &gin, &bin, &w, &h);
+
+    printf("R:\n");
+    print_block(rin); 
+    printf("G:\n");
+    print_block(gin);
+    printf("B:\n");
+    print_block(bin);
+
+    free(rin); free(gin); free(bin); free(rout); free(gout); free(bout);
     // INSTREAM* in = new_INSTREAM("test.bin", 8);
     // INSTREAM_pull(in, &width, 16); INSTREAM_pull(in, &height, 16);
     // printf("Width: %d, Height: %d\n", width, height);
@@ -68,8 +105,6 @@ int main() {
     // print_matrix(import_block);
 
     // delete_INSTREAM(in);
-    delete_RGB_IMAGE(img); 
-    delete_RGB_IMAGE(img_out);
 
 
 

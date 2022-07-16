@@ -43,7 +43,7 @@ void get_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_
     }
 }
 void put_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0) {
-    int i, j, disti, distj;
+    int i, j;
     for (i = 0; i < 8; i++) {
         for (j = 0; j < 8; j++) {
             if (j+J0 < IMG_WIDTH && i+I0 < IMG_HEIGHT) {
@@ -216,14 +216,7 @@ bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t 
     printf("Not found matching code for %d\n", data -> rrrrssss);
     return false;
 }
-void print_matrix(int16_t *seq) {
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            printf("%d ", seq[i*8+j]);
-        }
-        printf("\n");
-    }
-}
+
 int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS, 
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS) {
@@ -293,65 +286,10 @@ int block_decode(INSTREAM* in, int16_t *INT16_SEQUENCE, int16_t* PREV_DC,
         decode_data(in, rrrrssss, &ssss, &rrrr, &val);
         eob = write_data(INT16_SEQUENCE, false, idx, ssss, rrrr, val);
         idx++; idx+= rrrr;
-    }
-    printf("Idx: %d, Eob: %d\n", idx, eob);
-    
+    }    
     return eob ? 0 : 1;
 }
-//////////////////////////
 
-
-
-void print_f(float *matrix) {
-    int i, j;
-    for (i = 0; i < 8; i++) {
-        for (j = 0; j < 8; j++) {
-            printf("%f ", matrix[i * 8 + j]);
-        }
-        printf("\n");
-    }
-}
-void print_ubits(uint8_t n)
-{
-    int i;
-    for (i = 7; i >= 0; i--) {
-        printf("%d", (n >> i) & 1);
-    }
-}
-void print_bits(int8_t n)
-{
-    int i;
-    for (i = 7; i >= 0; i--) {
-        printf("%d", (n >> i) & 1);
-    }
-}
-void print_16bits(int16_t n)
-{
-    int i;
-    for (i = 15; i >= 0; i--) {
-        printf("%d", (n >> i) & 1);
-    }
-}
-void print_32bits(uint32_t n)
-{
-    int i;
-    for (i = 31; i >= 0; i--) {
-        printf("%d", (n >> i) & 1);
-    }
-}
-
-
-
-uint8_t min_bits(uint16_t n) {  
-    if (n == 0) return 1;
-    int i;
-    uint8_t count = 0;
-    for (i = 15; i >= 0; i--) {
-        if ((n >> i) & 1) return 16 - count;
-        count++;
-    }
-    return 0;
-}
 
 int min_bits_abs(int16_t n) {  
     if (n == 0) return 1;
@@ -380,7 +318,7 @@ int min_bits_code(uint16_t n) {
 bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, const uint8_t *LENGTHS, size_t CODES_NUMBER) {
     /* Checks if there are any matches of any amount of crecent digits of the compare base inside the CODES provided. */
     uint16_t code = 0, pull = 0;
-    int bits = 2, i, nigga;
+    int bits = 2, i;
     INSTREAM_pull(in, &code, 2);
     // printf("LOoking for next rrrrsss\n");
     while(bits < 16) {
@@ -434,7 +372,7 @@ bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int idx, int ssss, int rrrr
     if (ssss == 1) {INT16_SEQUENCE[idx] = (val == 1) ? -1 : 1; return false;}
 
     // normal cases
-    int i; bool is_neg; int16_t true_val;
+    bool is_neg; int16_t true_val;
     is_neg = (val & (1 << (ssss - 1))) != 0; // check sign bit
     val |= (1 << (ssss - 1)); // add the missing 1
     if (is_neg) {true_val = -val;} else {true_val = val;}

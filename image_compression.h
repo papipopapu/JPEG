@@ -33,7 +33,7 @@ extern const uint8_t DC_LUMINANCE_LENGTHS[12];
 extern const uint16_t DC_CHROMINANCE_CODES[12];
 extern const uint8_t DC_CHROMINANCE_LENGTHS[12];
 extern const uint8_t DC_VALUES[12];
-void print_matrix(int16_t *seq);
+
 // data_node
 typedef struct DATA_PACKET {
     /* Temporary struct to pack both AC and DC components */
@@ -66,12 +66,11 @@ typedef struct RGB_IMAGE {
 // block_process
 void get_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0);
 void put_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0);
-void print_f(float *matrix);
-void print_block(uint8_t *UINT8_BLOCK);
 void image_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr);
 void image_yCbCr_to_rgb  (uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b);
 
-void downsample420(RGB_IMAGE* image);
+void downsample_420(uint8_t * Cb, uint8_t *Cr, size_t N);
+
 
 
 void block_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK);
@@ -89,9 +88,9 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS,
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS);
 
-uint8_t min_bits(uint16_t n);
+
 int min_bits_abs(int16_t n);
-int min_bits_code(uint16_t n);
+
 
 // coders
 bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const uint8_t *VALUES, const uint8_t *LENGTHS, size_t CODES_NUMBER);
@@ -123,15 +122,14 @@ int block_decode(INSTREAM* in, int16_t *INT16_SEQUENCE, int16_t* PREV_DC,
 void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t *val);
 bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int idx, int ssss, int rrrr, uint16_t val);
 
-void print_32bits(uint32_t data);
-void print_16bits(int16_t data);
 
 
-int decode_image(char* filename, RGB_IMAGE *image);
+
+int decode_image(char *filename, uint8_t **r, uint8_t **g, uint8_t **b,  uint16_t *width, uint16_t *height);
 int decode_slice(INSTREAM *in, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, bool is_luminance);
-int encode_image(char* filename, RGB_IMAGE *image);
+int encode_image(char *filename, uint8_t *r, uint8_t *g, uint8_t *b,  uint16_t width, uint16_t height);
 int encode_slice(OUTSTREAM *out, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, bool is_luminance);
 
 
-void print_ubits(uint8_t n);
+
 #endif
