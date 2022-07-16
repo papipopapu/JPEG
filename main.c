@@ -60,8 +60,9 @@ int main() {
     prev_dc = 0;
     printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
     print_matrix(import_block);
-    //printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_CHROMINANCE_CODES, DC_VALUES, DC_CHROMINANCE_LENGTHS, AC_CHROMINANCE_CODES, AC_VALUES, AC_CHROMINANCE_LENGTHS));
-    //print_matrix(import_block);
+    prev_dc = 0;
+    printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
+    print_matrix(import_block);
     
     delete_INSTREAM(in);
     delete_RGB_IMAGE(img); 

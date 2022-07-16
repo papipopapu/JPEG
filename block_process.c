@@ -277,7 +277,7 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
     printf("//////////////////////////////////////////////////////////////////e\n");
     printf("eob\n");
 
-    OUTSTREAM_push(out, 0, 8);
+    OUTSTREAM_push(out, AC_CODES[0], AC_LENGTHS[0]);
     return 0;
 }
 
