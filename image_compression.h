@@ -66,12 +66,13 @@ typedef struct RGB_IMAGE {
 // block_process
 void get_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0);
 void put_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0);
-
+void print_f(float *matrix);
 void print_block(uint8_t *UINT8_BLOCK);
 void image_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr);
 void image_yCbCr_to_rgb  (uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b);
 
-void block_downsample420(uint8_t *UINT8_BLOCK);
+void downsample420(RGB_IMAGE* image);
+
 
 void block_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK);
 void block_inv_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK);

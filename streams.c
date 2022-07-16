@@ -16,7 +16,7 @@ void OUTSTREAM_reset_bytes(OUTSTREAM *out) {
 void INSTREAM_reset_bytes(INSTREAM *in) {
     if (in->read_bytes == (in->buffer_bytes-1)) { // there has been slip, and at we had alredy written up to the second to last byte
         in->buffer_bytes = fread(in->buffer, 1, in->buffer_bytes, in->file);
-        if (in->buffer_bytes == 0) in->eof = true;
+        if (in->buffer_bytes == 0) {in->eof = true;}
         in->read_bytes = -1;    
     }   in->read_bits = 0;
         in->read_bytes++;
@@ -25,6 +25,7 @@ void INSTREAM_reset_bytes(INSTREAM *in) {
 
 int OUTSTREAM_push(OUTSTREAM *out, uint16_t data, int bits) {
     // bits are the number of bits to encode from least to most significant
+    // printf("Pushing %d bits. Written bytes: %d, written bits: %d\n", bits, out->written_bytes, out->written_bits);
     if (bits < 1 || bits > 32) return 1;
     data &= (bits == 16) ? ~0 : (1 << bits) - 1; // remove trash data, but if whole int is needed, we cant bitshift by 0
     int slip = bits + out->written_bits - 8;  
@@ -35,13 +36,16 @@ int OUTSTREAM_push(OUTSTREAM *out, uint16_t data, int bits) {
     } else if (slip < 0) {
         out->buffer[out->written_bytes] |= data << -slip;
         out->written_bits += bits; 
+        // printf("< pushed %d data: ", bits); print_16bits(data << -slip); printf("\n");
     } else if (slip == 0) {
         out->buffer[out->written_bytes] |= data;
+        // printf("== pushed %d data: ", bits); print_16bits(data); printf("\n");
         OUTSTREAM_reset_bytes(out);
     } 
     return 0;
 }
 int INSTREAM_pull_1bit(INSTREAM *in) {// returs 1 or 0 if successful, -1 if not
+
     if (in->eof) return -1;
     if (in->read_bits == 7) {
         int ret = in->buffer[in->read_bytes] & 1;
@@ -57,12 +61,8 @@ int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits) { // pointer to uint, 
 
 ////////////////7 make this a dderivative from pull 1 bit dumb fuck retard
     // print buffer
-    //printf("Buffer: \n");
-    /*
-    for (int i = 0; i < in->buffer_bytes; i++) {
-        print_ubits(in->buffer[i]); printf("\n");//1111010
-    }
-    */
+    
+    
     // please set data t 0 to avoid garbage data
     if (bits < 1 || bits > 16) return 1;
     if (in->eof) return -1;
@@ -103,7 +103,11 @@ INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes) {
 
 int delete_OUTSTREAM(OUTSTREAM *out) {
     if (out == NULL) return -1;
-    if (out->written_bits != 0 || out->written_bytes != 0) fwrite(out->buffer, 1, max(out->written_bytes, 1), out->file); // flush buffer if something has been written
+    if (out->written_bits != 0 || out->written_bytes != 0) fwrite(out->buffer, 1, out->written_bytes+1, out->file);
+    // printf("End writing %d bytes and %d bits. Buffer:", out->written_bytes, out->written_bits); 
+    // print at least 1 uint from buffer
+
+// flush buffer if something has been written
     fclose(out->file);
     free(out->buffer);
     free(out);

@@ -52,18 +52,7 @@ void put_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_
         }
     }
 }
-void block_downsample420(uint8_t *UINT8_BLOCK)
-{
-    /*
-    Downsample a block of size 8 with a ratio of 4:2:0.
-    Args:
-        * UINT8_BLOCK: the block to downsample.
-    */
-    int i;
-    for (i = 0; i < 8; i++) {
-        UINT8_BLOCK[i] = 2 * round(UINT8_BLOCK[i] / 2.);  
-    }
-}
+
 void block_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK) {
     /*
     Obtains the discrete cosine transform of the given BLOCK of pixeks, into the FLOAT_BLOCK, both of size 8 * 8.
@@ -175,7 +164,7 @@ void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_
         * INT16_SEQUENCE: output block
         * INT16_BLOCK: input block
     */
-    for (int i = 0; i < 8 * 8; i++) {
+    for (int i = 0; i < 64; i++) {
         INT16_SEQUENCE[i] = INT16_BLOCK[SERIAL_IDX[i]];
     }
 }
@@ -188,8 +177,8 @@ void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const ui
         * INT16_SEQUENCE: input block
         * INT16_BLOCK: output block
     */
-    for (int i = 0; i < 8 * 8; i++) {
-        INT16_SEQUENCE[i] = INT16_BLOCK[SERIAL_IDX[8 * 8 - i - 1]];
+    for (int i = 0; i < 64; i++) {
+        INT16_BLOCK[SERIAL_IDX[i]] = INT16_SEQUENCE[i];
     }
 }
 
@@ -239,7 +228,7 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS, 
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS) {
     int i, zeros = 0; int16_t val = INT16_SEQUENCE[0];
-    printf("Recieved sequence: \n"); print_matrix(INT16_SEQUENCE); printf("\n");
+    // printf("Recieved sequence: \n"); print_matrix(INT16_SEQUENCE); printf("\n");
 
     DATA_PACKET data;
     DATA_PACKET_pack(&data, val - *PREV_DC, 0);
@@ -248,10 +237,10 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
     OUTSTREAM_push(out, data.VAL, data.VAL_bits);
     *PREV_DC = val;
     
-    printf("//////////////////////////////////////////////////////////////////\n");
-    printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
-    printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
-    printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
+    // printf("//////////////////////////////////////////////////////////////////\n");
+    // printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
+    // printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
+    // printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
     
 
     
@@ -260,22 +249,23 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
         if (val == 0 && zeros < 15) {
             zeros++;
         } else {
+            //  printf("//////////////////////////////////////////////////////////////////\n");
             DATA_PACKET_pack(&data, val, zeros);
             if (!DATA_PACKET_encode(&data, AC_CODES, AC_VALUES, AC_LENGTHS, 162)) return -1;
             OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
             OUTSTREAM_push(out, data.VAL, data.VAL_bits);
             zeros = 0;
     
-    printf("//////////////////////////////////////////////////////////////////\n");
-    printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
-    printf("rs code, length=%d, bits=", data.rs_code_bits); print_ubits(data.rs_code); printf("\n");
-    printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
+
+    // printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
+    // printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
+    // printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
     
         }
     }
     
-    printf("//////////////////////////////////////////////////////////////////e\n");
-    printf("eob\n");
+    // printf("//////////////////////////////////////////////////////////////////e\n");
+    // printf("eob\n");
 
     OUTSTREAM_push(out, AC_CODES[0], AC_LENGTHS[0]);
     return 0;
@@ -392,15 +382,15 @@ bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const 
     uint16_t code = 0, pull = 0;
     int bits = 2, i, nigga;
     INSTREAM_pull(in, &code, 2);
-    printf("LOoking for next rrrrsss\n");
+    // printf("LOoking for next rrrrsss\n");
     while(bits < 16) {
-        printf("Checking bits=%d, code: ", bits); print_16bits(code); printf("\n");
+        // printf("Checking bits=%d, code: ", bits); print_16bits(code); printf("\n");
         for (i = 0; i < CODES_NUMBER; i++) {
             //printf("Comparing with: bits=%d, code=", (int)LENGTHS[i]); print_16bits(CODES[i]); printf("\n");
             if ((code == CODES[i]) && (bits == LENGTHS[i])) {
                 *rrrrssss = VALUES[i];
                
-                printf("Found code! i=%d, rrrrssss=", i); print_ubits(*rrrrssss); printf("\n");
+                // printf("Found code! i=%d, rrrrssss=", i); print_ubits(*rrrrssss); printf("\n");
                 return true;
             }
         }
@@ -408,7 +398,7 @@ bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const 
         code = (code << 1) | pull;
         bits++;
     }
-    printf("Not found!\n");
+    // printf("Not found!\n");
     return false;
 }
 
@@ -418,7 +408,7 @@ void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t 
     *ssss = rrrrssss & 0b1111;
     
     *val = 0; INSTREAM_pull(in, val, *ssss);
-    printf("Pulling %d bits TO GET VAL: ", *ssss); print_16bits(*val); printf("\n");
+    // printf("Pulling %d bits TO GET VAL: ", *ssss); print_16bits(*val); printf("\n");
     
 
 }
@@ -449,7 +439,7 @@ bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int idx, int ssss, int rrrr
     val |= (1 << (ssss - 1)); // add the missing 1
     if (is_neg) {true_val = -val;} else {true_val = val;}
     INT16_SEQUENCE[idx] = true_val;
-    printf("true val pulled: %d\n", true_val);
+    // printf("true val pulled: %d\n", true_val);
     return false;
  
 }

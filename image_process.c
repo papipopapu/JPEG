@@ -22,6 +22,12 @@ void delete_RGB_IMAGE(RGB_IMAGE *img) {
     free(img->b);
     free(img);
 }
+void downsample_420(RGB_IMAGE *img) { // must be ycbcr
+    for (int i = 0; i < img->HEIGHT*img->WIDTH; i++) {
+        img->g[i] = 2*round(img->g[i]/2.0);
+        img->b[i] = 2*round(img->b[i]/2.0);
+    }
+}
 
 void image_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr)
 {
@@ -96,12 +102,13 @@ int encode_image(char* filename, RGB_IMAGE *image) {
     }
     OUTSTREAM *out = new_OUTSTREAM(filename, 8);
     OUTSTREAM_push(out, image->WIDTH, 16); OUTSTREAM_push(out, image->HEIGHT, 16);
-    //image_rgb_to_yCbCr(image->r, image->g, image->b);
+    image_rgb_to_yCbCr(image->r, image->g, image->b);
+    downsample_420(image);
     // r = y, g = Cb, b = Cr
     // downsample
     encode_slice(out, image->r, image->WIDTH, image->HEIGHT, true);
-    encode_slice(out, image->g, image->WIDTH, image->HEIGHT, true);
-    encode_slice(out, image->b, image->WIDTH, image->HEIGHT, true);
+    encode_slice(out, image->g, image->WIDTH, image->HEIGHT, false);
+    encode_slice(out, image->b, image->WIDTH, image->HEIGHT, false);
     delete_OUTSTREAM(out);
     return 0;
 }
@@ -116,10 +123,14 @@ int decode_slice(INSTREAM *in, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, 
             if (is_luminance) {
             if (block_decode(in, sequence, &PREV_DC, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS,
                                                      AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS) != 0) {printf("Error decoding..."); return -1;}
+                
+                block_inv_serialize(int16_block, sequence, ZIGZAG_IDX);
                 block_inv_quantize(LUMINANCE_QUANT, int16_block, float_block);
+
             } else {
             if (block_decode(in, sequence, &PREV_DC, DC_CHROMINANCE_CODES, DC_VALUES, DC_CHROMINANCE_LENGTHS,
                                                      AC_CHROMINANCE_CODES, AC_VALUES, AC_CHROMINANCE_LENGTHS) != 0) {printf("Error decoding..."); return -1;};
+                block_inv_serialize(int16_block, sequence, ZIGZAG_IDX);
                 block_inv_quantize(CHROMINANCE_QUANT, int16_block, float_block);
             }
             block_inv_dct(block, float_block);
@@ -140,7 +151,7 @@ int decode_image(char* filename, RGB_IMAGE* image) {
     decode_slice(in, image->r, image->WIDTH, image->HEIGHT, true);
     decode_slice(in, image->g, image->WIDTH, image->HEIGHT, false);
     decode_slice(in, image->b, image->WIDTH, image->HEIGHT, false);
-    //image_yCbCr_to_rgb(image->r, image->g, image->b);
+    image_yCbCr_to_rgb(image->r, image->g, image->b);
     delete_INSTREAM(in);
     return 0;
 }

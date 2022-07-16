@@ -42,31 +42,34 @@ int main() {
         87, 79, 69, 68, 65, 76, 78, 94
     };
     RGB_IMAGE *img = new_RGB_IMAGE(8, 8); 
-    //RGB_IMAGE *img_out = new_RGB_IMAGE(8, 8);
+    RGB_IMAGE *img_out = new_RGB_IMAGE(8, 8);
     memcpy(img->r, uint8_block, sizeof(uint8_t) * 64);
     memcpy(img->g, uint8_block, sizeof(uint8_t) * 64);
     memcpy(img->b, uint8_block, sizeof(uint8_t) * 64);
 
     encode_image("test.bin", img);
-    //decode_image("test.bin", img_out);
+    decode_image("test.bin", img_out);
 
-    INSTREAM* in = new_INSTREAM("test.bin", 8);
-    INSTREAM_pull(in, &width, 16); INSTREAM_pull(in, &height, 16);
-    printf("Width: %d, Height: %d\n", width, height);
+    print_RGB_IMAGE(img);
+    print_RGB_IMAGE(img_out);
+
+    // INSTREAM* in = new_INSTREAM("test.bin", 8);
+    // INSTREAM_pull(in, &width, 16); INSTREAM_pull(in, &height, 16);
+    // printf("Width: %d, Height: %d\n", width, height);
 
 
-    printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
-    print_matrix(import_block);
-    prev_dc = 0;
-    printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
-    print_matrix(import_block);
-    prev_dc = 0;
-    printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
-    print_matrix(import_block);
-    
-    delete_INSTREAM(in);
+    // printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
+    // print_matrix(import_block);
+    // prev_dc = 0;
+    // printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
+    // print_matrix(import_block);
+    // prev_dc = 0;
+    // printf("Result: %d\n", block_decode(in, import_block, &prev_dc, DC_LUMINANCE_CODES, DC_VALUES, DC_LUMINANCE_LENGTHS, AC_LUMINANCE_CODES, AC_VALUES, AC_LUMINANCE_LENGTHS));
+    // print_matrix(import_block);
+
+    // delete_INSTREAM(in);
     delete_RGB_IMAGE(img); 
-    //delete_RGB_IMAGE(img_out);
+    delete_RGB_IMAGE(img_out);
 
 
 
