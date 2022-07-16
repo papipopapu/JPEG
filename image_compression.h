@@ -31,9 +31,9 @@ extern const uint8_t AC_VALUES[162];
 extern const uint16_t DC_LUMINANCE_CODES[12];
 extern const uint8_t DC_LUMINANCE_LENGTHS[12];
 extern const uint16_t DC_CHROMINANCE_CODES[12];
-extern const uint8_t DC_LUMINANCE_LENGTHS[12];
+extern const uint8_t DC_CHROMINANCE_LENGTHS[12];
 extern const uint8_t DC_VALUES[12];
-
+void print_matrix(int16_t *seq);
 // data_node
 typedef struct DATA_PACKET {
     /* Temporary struct to pack both AC and DC components */
@@ -59,14 +59,17 @@ typedef struct INSTREAM {
     bool eof;
 } INSTREAM;
 
-
-
-
+typedef struct RGB_IMAGE {
+    uint8_t *r, *g, *b;
+    uint16_t HEIGHT, WIDTH;
+} RGB_IMAGE;
 // block_process
-void get_block(uint8_t *IMAGE, uint8_t *UINT8_BLOCK, size_t IMG_WIDTH, size_t IMG_HEIGHT, size_t I0, size_t J0);
+void get_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0);
+void put_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0);
 
-void block_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr);
-void block_yCbCr_to_rgb  (uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b);
+void print_block(uint8_t *UINT8_BLOCK);
+void image_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr);
+void image_yCbCr_to_rgb  (uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b);
 
 void block_downsample420(uint8_t *UINT8_BLOCK);
 
@@ -81,7 +84,7 @@ void block_inv_quantize(const float *QUANT_MAT, int16_t *INT16_BLOCK, float *FLO
 void block_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const uint8_t *SERIAL_IDX);
 
-int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
+int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS,
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS);
 
@@ -97,6 +100,8 @@ void encode_to_cache(uint16_t CODE, uint32_t *curr_cache, uint32_t *next_cache, 
 void DATA_PACKET_pack(DATA_PACKET *data, int16_t VAL, uint8_t zeros);
 bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t *VALUES, const uint8_t *LENGTHS, size_t N_CODES);
 
+RGB_IMAGE *new_RGB_IMAGE(uint16_t width, uint16_t height);
+void delete_RGB_IMAGE(RGB_IMAGE *img);
 
 
 
@@ -121,6 +126,10 @@ void print_32bits(uint32_t data);
 void print_16bits(int16_t data);
 
 
+int decode_image(char* filename, RGB_IMAGE *image);
+int decode_slice(INSTREAM *in, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, bool is_luminance);
+int encode_image(char* filename, RGB_IMAGE *image);
+int encode_slice(OUTSTREAM *out, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, bool is_luminance);
 
 
 void print_ubits(uint8_t n);

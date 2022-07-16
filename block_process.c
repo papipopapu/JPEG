@@ -1,8 +1,7 @@
 #include "image_compression.h"
-static size_t bhs;
-static size_t ahs;
 
-void get_block(uint8_t *IMAGE, uint8_t *UINT8_BLOCK, size_t IMG_WIDTH, size_t IMG_HEIGHT, size_t I0, size_t J0) {
+
+void get_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0) {
     /*
     Extract a block of size 8 from IMAGE at position (I0, J0). If the block overflows the image, it is filled
     with an approximation based on near values to reach 8 * 8 pixels.
@@ -32,54 +31,26 @@ void get_block(uint8_t *IMAGE, uint8_t *UINT8_BLOCK, size_t IMG_WIDTH, size_t IM
                 UINT8_BLOCK[i * 8 + j] = UINT8_BLOCK[i * 8 + (j-1)] / distj;
             }
             else if (j + J0 == IMG_WIDTH) {
-                UINT8_BLOCK[i * 8 + j] = IMAGE[(I0 + i) * IMG_WIDTH + (J0 + j-1)] / 2.;
+                UINT8_BLOCK[i * 8 + j] = slice[(I0 + i) * IMG_WIDTH + (J0 + j-1)] / 2.;
             }       
             else if (i + I0 == IMG_HEIGHT) {
-                UINT8_BLOCK[i * 8 + j] = IMAGE[(I0 + i-1) * IMG_WIDTH + (J0 + j)] / 2.;
+                UINT8_BLOCK[i * 8 + j] = slice[(I0 + i-1) * IMG_WIDTH + (J0 + j)] / 2.;
             }
             else {
-                UINT8_BLOCK[i * 8 + j] = IMAGE[(I0 + i) * IMG_WIDTH + (J0 + j)];
+                UINT8_BLOCK[i * 8 + j] = slice[(I0 + i) * IMG_WIDTH + (J0 + j)];
             }
         }
     }
 }
-void block_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr)
-{
-    /*
-    Translates rgb values to yCbCr values.
-        * r_to_y: the block containing r values, and output for y.
-        * g_to_Cb: the block containing g values, and output for Cb.
-        * b_to_Cr: the block containing b values, and output for Cr.
-    */
-   int i;
-   uint8_t R, G, B;
-   for (i = 0; i < 8 * 8; i++) {
-        R = r_to_y[i];
-        G = g_to_Cb[i];
-        B = b_to_Cr[i];
-        r_to_y[i] = (R * 0.299 + G * 0.587 + B * 0.114);
-        g_to_Cb[i] = (R * -0.168736 + G * -0.331264 + B * 0.5 + 128);
-        b_to_Cr[i] = (R * 0.5 + G * -0.418688 + B * -0.081312 + 128);
-   }
-}
-void block_yCbCt_to_rgb(uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b)
-{
-    /*
-    Translates yCbCr values to rgb values.
-        * y_to_r: the block containing y values, and output for r.
-        * Cb_to_g: the block containing Cb values, and output for g.
-        * Cr_to_b: the block containing Cr values, and output for b.
-    */
-   int i;
-   uint8_t Y, Cb, Cr;
-   for (i = 0; i < 8 * 8; i++) {
-        Y = y_to_r[i];
-        Cb = Cb_to_g[i];
-        Cr = Cr_to_b[i];
-        y_to_r[i] = (Y + 1.402 * (Cr - 128));
-        Cb_to_g[i] = (Y - 0.344136 * (Cb - 128) - 0.714136 * (Cr - 128));
-        Cr_to_b[i] = (Y + 1.772 * (Cb - 128));
-   }
+void put_block(uint8_t *slice, uint8_t *UINT8_BLOCK, uint16_t IMG_WIDTH, uint16_t IMG_HEIGHT, int I0, int J0) {
+    int i, j, disti, distj;
+    for (i = 0; i < 8; i++) {
+        for (j = 0; j < 8; j++) {
+            if (j+J0 < IMG_WIDTH && i+I0 < IMG_HEIGHT) {
+                slice[(I0 + i)*IMG_WIDTH + J0 + j] = UINT8_BLOCK[i * 8 + j];
+            }
+        }
+    }
 }
 void block_downsample420(uint8_t *UINT8_BLOCK)
 {
@@ -256,27 +227,37 @@ bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t 
     printf("Not found matching code for %d\n", data -> rrrrssss);
     return false;
 }
-
-int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
+void print_matrix(int16_t *seq) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            printf("%d ", seq[i*8+j]);
+        }
+        printf("\n");
+    }
+}
+int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS, 
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS) {
     int i, zeros = 0; int16_t val = INT16_SEQUENCE[0];
+    printf("Recieved sequence: \n"); print_matrix(INT16_SEQUENCE); printf("\n");
+
     DATA_PACKET data;
-    DATA_PACKET_pack(&data, val - PREV_DC, 0);
+    DATA_PACKET_pack(&data, val - *PREV_DC, 0);
     if (!DATA_PACKET_encode(&data, DC_CODES, DC_VALUES, DC_LENGTHS, 12)) return -1;
     OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
     OUTSTREAM_push(out, data.VAL, data.VAL_bits);
-    /*
+    *PREV_DC = val;
+    
     printf("//////////////////////////////////////////////////////////////////\n");
     printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
     printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
     printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
-    */
+    
 
     
     for (i = 1; i < 64; i++) {
         val = INT16_SEQUENCE[i];
-        if (val == 0 && zeros < 16) {
+        if (val == 0 && zeros < 15) {
             zeros++;
         } else {
             DATA_PACKET_pack(&data, val, zeros);
@@ -284,17 +265,17 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t PREV_DC,
             OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
             OUTSTREAM_push(out, data.VAL, data.VAL_bits);
             zeros = 0;
-    /*
+    
     printf("//////////////////////////////////////////////////////////////////\n");
     printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
-    printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
+    printf("rs code, length=%d, bits=", data.rs_code_bits); print_ubits(data.rs_code); printf("\n");
     printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
-    */
+    
         }
     }
     
-    //printf("//////////////////////////////////////////////////////////////////e\n");
-   // printf("eob\n");
+    printf("//////////////////////////////////////////////////////////////////e\n");
+    printf("eob\n");
 
     OUTSTREAM_push(out, 0, 8);
     return 0;
@@ -323,6 +304,7 @@ int block_decode(INSTREAM* in, int16_t *INT16_SEQUENCE, int16_t* PREV_DC,
         eob = write_data(INT16_SEQUENCE, false, idx, ssss, rrrr, val);
         idx++; idx+= rrrr;
     }
+    printf("Idx: %d, Eob: %d\n", idx, eob);
     
     return eob ? 0 : 1;
 }
@@ -410,15 +392,15 @@ bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const 
     uint16_t code = 0, pull = 0;
     int bits = 2, i, nigga;
     INSTREAM_pull(in, &code, 2);
-    //printf("LOoking for next rrrrsss\n");
+    printf("LOoking for next rrrrsss\n");
     while(bits < 16) {
-        //printf("Checking bits=%d, code: ", bits); print_16bits(code); printf("\n");
+        printf("Checking bits=%d, code: ", bits); print_16bits(code); printf("\n");
         for (i = 0; i < CODES_NUMBER; i++) {
             //printf("Comparing with: bits=%d, code=", (int)LENGTHS[i]); print_16bits(CODES[i]); printf("\n");
             if ((code == CODES[i]) && (bits == LENGTHS[i])) {
                 *rrrrssss = VALUES[i];
                
-                //printf("Found code! i=%d, rrrrssss=", i); print_ubits(*rrrrssss); printf("\n");
+                printf("Found code! i=%d, rrrrssss=", i); print_ubits(*rrrrssss); printf("\n");
                 return true;
             }
         }
@@ -436,7 +418,7 @@ void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t 
     *ssss = rrrrssss & 0b1111;
     
     *val = 0; INSTREAM_pull(in, val, *ssss);
-    //printf("Pulling %d bits TO GET VAL: ", *ssss); print_16bits(*val); printf("\n");
+    printf("Pulling %d bits TO GET VAL: ", *ssss); print_16bits(*val); printf("\n");
     
 
 }
@@ -467,6 +449,7 @@ bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int idx, int ssss, int rrrr
     val |= (1 << (ssss - 1)); // add the missing 1
     if (is_neg) {true_val = -val;} else {true_val = val;}
     INT16_SEQUENCE[idx] = true_val;
+    printf("true val pulled: %d\n", true_val);
     return false;
  
 }
