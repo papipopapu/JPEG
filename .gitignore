@@ -1,0 +1,40 @@
+# Build artifacts
+*.o
+*.so
+*.out
+*.a
+*.bin
+
+# Build directories
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Executables (except build-managed ones)
+jpeg_test
+
+# Library files
+libshitpeg
+libshitpeg.so
+
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tempCodeRunnerFile.c
+
+# CodeQL
+_codeql_detected_source_root

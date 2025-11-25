@@ -80,10 +80,10 @@ void block_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK) {
 void block_inv_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK) 
 {
     /*
-    Obtains the inversse discrete cosine transform of the given BLOCK of pixeks, into the FLOAT_BLOCK, both of size 8 * 8.
+    Obtains the inverse discrete cosine transform of the given BLOCK of pixels, into the FLOAT_BLOCK, both of size 8 * 8.
     Args:
         * UINT8_BLOCK: output block
-        * FLOAT_BLOCK: inùt block, contains the dct transform           
+        * FLOAT_BLOCK: input block, contains the dct transform           
     */
     int u, v, x, y;
     float au, av, temp, cte = 2./8;
@@ -97,7 +97,10 @@ void block_inv_dct(uint8_t *UINT8_BLOCK, float *FLOAT_BLOCK)
                     temp += au * av * FLOAT_BLOCK[u * 8 + v] * cos(M_PI*u*0.5*(2.*x+1.)/8) * cos(M_PI*v*0.5*(2.*y+1.)/8);
                 }
             } 
-            UINT8_BLOCK[x * 8 + y] = round(cte * temp) + 128; 
+            int val = (int)round(cte * temp) + 128;
+            if (val < 0) val = 0;
+            if (val > 255) val = 255;
+            UINT8_BLOCK[x * 8 + y] = (uint8_t)val; 
         }
     }
 }
@@ -183,25 +186,42 @@ void block_inv_serialize(int16_t *INT16_BLOCK, int16_t *INT16_SEQUENCE, const ui
 }
 
 void DATA_PACKET_pack(DATA_PACKET *data, int16_t VAL, uint8_t zeros) {
-    uint8_t is_neg = 0; 
-    int min_bits; 
-    if (VAL < 0) {VAL = -VAL;  is_neg = 1;}
-    min_bits = (VAL == 0) ? 0 : min_bits_abs(VAL);
-    data -> rrrrssss = zeros; 
-    data -> rrrrssss <<= 4; 
-    data -> rrrrssss |= min_bits; 
-    data -> VAL = VAL;
-    data -> VAL &= (1 << (min_bits-1))-1; 
-    data -> VAL |= is_neg << (min_bits-1); 
-    data -> VAL_bits = min_bits;
-
-    //printf("Packed rrrrssss: %d, bits: ", data -> rrrrssss); print_ubits(data -> rrrrssss); printf("\n");
+    /*
+    Pack a value into a DATA_PACKET for JPEG encoding.
     
-    // 0 size -> read 0 (val ~+-0      ) -> { read 0-1  (+) append sign bit } absurd, we know its 0 
-    // 1 size -> read 1 (val ~+-1      ) -> { read 1-1  (+) append sign bit }
-    // ...
-    // n size -> read n (val ~+-2^(n-1)) -> { read n-1  (+) append sign bit }
-
+    JPEG coefficient encoding:
+    - Category (ssss) = minimum bits needed to represent |VAL|
+    - For category n, values range from -2^n+1 to -2^(n-1) and 2^(n-1) to 2^n-1
+    - Positive values: write the value directly (n bits)
+    - Negative values: write (value - 1) in one's complement form (n bits)
+    
+    Examples:
+    - VAL = 0:  ssss = 0, no additional bits
+    - VAL = 1:  ssss = 1, bits = 1
+    - VAL = -1: ssss = 1, bits = 0
+    - VAL = 2:  ssss = 2, bits = 10
+    - VAL = -2: ssss = 2, bits = 01
+    - VAL = 3:  ssss = 2, bits = 11
+    - VAL = -3: ssss = 2, bits = 00
+    */
+    int min_bits;
+    int16_t abs_val = (VAL < 0) ? -VAL : VAL;
+    
+    min_bits = (abs_val == 0) ? 0 : min_bits_abs(abs_val);
+    
+    data->rrrrssss = zeros;
+    data->rrrrssss <<= 4;
+    data->rrrrssss |= (uint8_t)min_bits;
+    data->VAL_bits = min_bits;
+    
+    if (VAL > 0) {
+        data->VAL = (uint16_t)VAL;
+    } else if (VAL < 0) {
+        // One's complement: flip all bits of |VAL|, keeping only min_bits
+        data->VAL = (uint16_t)(VAL - 1) & ((1 << min_bits) - 1);
+    } else {
+        data->VAL = 0;
+    }
 }
 
 bool DATA_PACKET_encode(DATA_PACKET *data, const uint16_t *CODES, const uint8_t *VALUES, const uint8_t *LENGTHS, size_t N_CODES) {
@@ -221,7 +241,15 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
  const uint16_t *DC_CODES, const uint8_t *DC_VALUES, const uint8_t *DC_LENGTHS, 
  const uint16_t *AC_CODES, const uint8_t *AC_VALUES, const uint8_t *AC_LENGTHS) {
     int i, zeros = 0; int16_t val = INT16_SEQUENCE[0];
-    // printf("Recieved sequence: \n"); print_matrix(INT16_SEQUENCE); printf("\n");
+    int last_nonzero_idx = 0;
+    
+    // Find last non-zero AC coefficient
+    for (i = 63; i >= 1; i--) {
+        if (INT16_SEQUENCE[i] != 0) {
+            last_nonzero_idx = i;
+            break;
+        }
+    }
 
     DATA_PACKET data;
     DATA_PACKET_pack(&data, val - *PREV_DC, 0);
@@ -230,37 +258,23 @@ int block_encode(OUTSTREAM* out, int16_t *INT16_SEQUENCE, int16_t *PREV_DC,
     OUTSTREAM_push(out, data.VAL, data.VAL_bits);
     *PREV_DC = val;
     
-    // printf("//////////////////////////////////////////////////////////////////\n");
-    // printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
-    // printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
-    // printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
-    
-
-    
-    for (i = 1; i < 64; i++) {
+    for (i = 1; i <= last_nonzero_idx; i++) {
         val = INT16_SEQUENCE[i];
         if (val == 0 && zeros < 15) {
             zeros++;
         } else {
-            //  printf("//////////////////////////////////////////////////////////////////\n");
             DATA_PACKET_pack(&data, val, zeros);
             if (!DATA_PACKET_encode(&data, AC_CODES, AC_VALUES, AC_LENGTHS, 162)) return -1;
             OUTSTREAM_push(out, data.rs_code, data.rs_code_bits);
             OUTSTREAM_push(out, data.VAL, data.VAL_bits);
             zeros = 0;
-    
-
-    // printf("rrrrssss, bits="); print_16bits(data.rrrrssss); printf("\n");
-    // printf("rs code, length=%d, bits=", data.rs_code_bits); print_16bits(data.rs_code); printf("\n");
-    // printf("value=%d, length=%d, bits=", val, data.VAL_bits); print_16bits(data.VAL); printf("\n");
-    
         }
     }
     
-    // printf("//////////////////////////////////////////////////////////////////e\n");
-    // printf("eob\n");
-
-    OUTSTREAM_push(out, AC_CODES[0], AC_LENGTHS[0]);
+    // Write EOB if there are trailing zeros (or if all AC coefficients are zero)
+    if (last_nonzero_idx < 63) {
+        OUTSTREAM_push(out, AC_CODES[0], AC_LENGTHS[0]);
+    }
     return 0;
 }
 
@@ -273,21 +287,34 @@ int block_decode(INSTREAM* in, int16_t *INT16_SEQUENCE, int16_t* PREV_DC,
     int rrrr, ssss, idx=1;
     bool eob = false;
     
+    // Initialize sequence to zeros
+    for (int i = 0; i < 64; i++) INT16_SEQUENCE[i] = 0;
 
-    if(!search_codes(in, &rrrrssss, DC_CODES, DC_VALUES, DC_LENGTHS, 12)) {printf("Code not found!\n"); return -1;}
+    // Decode DC coefficient
+    if(!search_codes(in, &rrrrssss, DC_CODES, DC_VALUES, DC_LENGTHS, 12)) {printf("DC Code not found!\n"); return -1;}
     decode_data(in, rrrrssss, &ssss, &rrrr, &val);
-    if (rrrr != 0) return -1; // some integrity checking, non dc read (run != 0)
-    write_data(INT16_SEQUENCE, true, 0, ssss, 0, val+*PREV_DC);
+    if (rrrr != 0) return -1; // integrity check: DC should have run=0
+    
+    // Decode the DC differential value
+    int16_t dc_diff;
+    if (ssss == 0) {
+        dc_diff = 0;
+    } else if (val & (1 << (ssss - 1))) {
+        dc_diff = (int16_t)val;
+    } else {
+        dc_diff = (int16_t)val - (1 << ssss) + 1;
+    }
+    INT16_SEQUENCE[0] = dc_diff + *PREV_DC;
     *PREV_DC = INT16_SEQUENCE[0];
 
-
+    // Decode AC coefficients
     while (!eob && idx < 64) {
-        if(!search_codes(in, &rrrrssss, AC_CODES, AC_VALUES, AC_LENGTHS, 162)){printf("Code not found!\n"); return -1;};
+        if(!search_codes(in, &rrrrssss, AC_CODES, AC_VALUES, AC_LENGTHS, 162)){printf("AC Code not found at idx %d!\n", idx); return -1;}
         decode_data(in, rrrrssss, &ssss, &rrrr, &val);
         eob = write_data(INT16_SEQUENCE, false, idx, ssss, rrrr, val);
-        idx++; idx+= rrrr;
+        idx++; idx += rrrr;
     }    
-    return eob ? 0 : 1;
+    return 0;
 }
 
 
@@ -320,30 +347,26 @@ bool search_codes(INSTREAM *in, uint8_t *rrrrssss, const uint16_t *CODES, const 
     uint16_t code = 0, pull = 0;
     int bits = 2, i;
     INSTREAM_pull(in, &code, 2);
-    // printf("LOoking for next rrrrsss\n");
-    while(bits < 16) {
-        // printf("Checking bits=%d, code: ", bits); print_16bits(code); printf("\n");
+    
+    while(bits <= 16) {
         for (i = 0; i < CODES_NUMBER; i++) {
-            //printf("Comparing with: bits=%d, code=", (int)LENGTHS[i]); print_16bits(CODES[i]); printf("\n");
             if ((code == CODES[i]) && (bits == LENGTHS[i])) {
                 *rrrrssss = VALUES[i];
-               
-                // printf("Found code! i=%d, rrrrssss=", i); print_ubits(*rrrrssss); printf("\n");
                 return true;
             }
         }
+        if (bits == 16) break;  // Already checked 16-bit codes, don't read more
         INSTREAM_pull(in, &pull, 1);
         code = (code << 1) | pull;
         bits++;
     }
-    // printf("Not found!\n");
     return false;
 }
 
 void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t *val) {
     /* Decodes the data packet. */
     *rrrr = rrrrssss >> 4;
-    *ssss = rrrrssss & 0b1111;
+    *ssss = rrrrssss & 0x0F;
     
     *val = 0; INSTREAM_pull(in, val, *ssss);
     // printf("Pulling %d bits TO GET VAL: ", *ssss); print_16bits(*val); printf("\n");
@@ -352,32 +375,52 @@ void decode_data(INSTREAM *in, uint8_t rrrrssss, int *ssss, int *rrrr, uint16_t 
 }
 
 bool write_data(int16_t *INT16_SEQUENCE, bool is_dc, int idx, int ssss, int rrrr, uint16_t val) {
-    // check if eob
-    //printf("Run: %d\n", rrrr);
+    /*
+    Decode and write a value to the sequence.
+    
+    JPEG coefficient decoding:
+    - If MSB of val (in ssss bits) is 1, value is positive: true_val = val
+    - If MSB of val is 0, value is negative: true_val = val - 2^ssss + 1
+    
+    Examples:
+    - ssss = 1, val = 1 -> true_val = 1
+    - ssss = 1, val = 0 -> true_val = 0 - 2 + 1 = -1
+    - ssss = 2, val = 10 (2) -> true_val = 2
+    - ssss = 2, val = 01 (1) -> true_val = 1 - 4 + 1 = -2
+    - ssss = 2, val = 11 (3) -> true_val = 3
+    - ssss = 2, val = 00 (0) -> true_val = 0 - 4 + 1 = -3
+    */
+    
+    // Check for EOB (End of Block)
     if (!is_dc && rrrr == 0 && ssss == 0) {
-        while(idx < 64) {INT16_SEQUENCE[idx++] = 0;}
+        // EOB - remaining coefficients are zero (already initialized)
         return true;
     }
 
-    // write zeros
-    int k = 0, safety_counter = 0;
-    while(k<rrrr) {INT16_SEQUENCE[idx+k] = 0; k++; safety_counter++; if (safety_counter > 15) {
-        printf("Exceeded safety"); return false;}}
+    // Write run of zeros before the value
+    for (int k = 0; k < rrrr && (idx + k) < 64; k++) {
+        INT16_SEQUENCE[idx + k] = 0;
+    }
     idx += rrrr;
+    
+    if (idx >= 64) return false;
 
-    // then, we write the value
-
-    // special cases
-    if (ssss == 0) {INT16_SEQUENCE[idx] = 0;  return false;}
-    if (ssss == 1) {INT16_SEQUENCE[idx] = (val == 1) ? -1 : 1; return false;}
-
-    // normal cases
-    bool is_neg; int16_t true_val;
-    is_neg = (val & (1 << (ssss - 1))) != 0; // check sign bit
-    val |= (1 << (ssss - 1)); // add the missing 1
-    if (is_neg) {true_val = -val;} else {true_val = val;}
+    // Decode and write the value
+    if (ssss == 0) {
+        INT16_SEQUENCE[idx] = 0;
+        return false;
+    }
+    
+    // Check MSB to determine sign
+    int16_t true_val;
+    if (val & (1 << (ssss - 1))) {
+        // MSB is 1: positive value
+        true_val = (int16_t)val;
+    } else {
+        // MSB is 0: negative value (one's complement)
+        true_val = (int16_t)val - (1 << ssss) + 1;
+    }
+    
     INT16_SEQUENCE[idx] = true_val;
-    // printf("true val pulled: %d\n", true_val);
     return false;
- 
 }

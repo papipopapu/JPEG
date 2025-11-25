@@ -15,50 +15,71 @@ void delete_RGB_IMAGE(RGB_IMAGE *img) {
     free(img->b);
     free(img);
 }
-void downsample_420(uint8_t * Cb, uint8_t *Cr, size_t N) { // must be ycbcr
-    for (int i = 0; i < N; i++) {
-        Cb[i] = 2*round(Cb[i]/2.0);
-        Cr[i] = 2*round(Cr[i]/2.0);
+static inline uint8_t clamp_uint8(double val) {
+    if (val < 0) return 0;
+    if (val > 255) return 255;
+    return (uint8_t)round(val);
+}
+
+void downsample_420(uint8_t *Cb, uint8_t *Cr, size_t N) {
+    /* 
+    Placeholder for 4:2:0 chroma subsampling.
+    Currently disabled to maintain full quality. 
+    Real implementation would average 2x2 blocks of Cb/Cr.
+    */
+    (void)Cb;
+    (void)Cr;
+    (void)N;
+}
+
+void slice_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr, size_t N)
+{
+    /*
+    Translates rgb values to yCbCr values for N pixels.
+        * r_to_y: the array containing r values, output for y.
+        * g_to_Cb: the array containing g values, output for Cb.
+        * b_to_Cr: the array containing b values, output for Cr.
+        * N: number of pixels to convert.
+    */
+    for (size_t i = 0; i < N; i++) {
+        uint8_t R = r_to_y[i];
+        uint8_t G = g_to_Cb[i];
+        uint8_t B = b_to_Cr[i];
+        r_to_y[i] = clamp_uint8(R * 0.299 + G * 0.587 + B * 0.114);
+        g_to_Cb[i] = clamp_uint8(R * -0.168736 + G * -0.331264 + B * 0.5 + 128);
+        b_to_Cr[i] = clamp_uint8(R * 0.5 + G * -0.418688 + B * -0.081312 + 128);
+    }
+}
+
+void slice_yCbCr_to_rgb(uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b, size_t N)
+{
+    /*
+    Translates yCbCr values to rgb values for N pixels.
+        * y_to_r: the array containing y values, output for r.
+        * Cb_to_g: the array containing Cb values, output for g.
+        * Cr_to_b: the array containing Cr values, output for b.
+        * N: number of pixels to convert.
+    */
+    for (size_t i = 0; i < N; i++) {
+        uint8_t Y = y_to_r[i];
+        uint8_t Cb = Cb_to_g[i];
+        uint8_t Cr = Cr_to_b[i];
+        y_to_r[i] = clamp_uint8(Y + 1.402 * (Cr - 128));
+        Cb_to_g[i] = clamp_uint8(Y - 0.344136 * (Cb - 128) - 0.714136 * (Cr - 128));
+        Cr_to_b[i] = clamp_uint8(Y + 1.772 * (Cb - 128));
     }
 }
 
 void image_rgb_to_yCbCr(uint8_t *r_to_y, uint8_t *g_to_Cb, uint8_t *b_to_Cr)
 {
-    /*
-    Translates rgb values to yCbCr values.
-        * r_to_y: the block containing r values, and output for y.
-        * g_to_Cb: the block containing g values, and output for Cb.
-        * b_to_Cr: the block containing b values, and output for Cr.
-    */
-   int i;
-   uint8_t R, G, B;
-   for (i = 0; i < 8 * 8; i++) {
-        R = r_to_y[i];
-        G = g_to_Cb[i];
-        B = b_to_Cr[i];
-        r_to_y[i] = (R * 0.299 + G * 0.587 + B * 0.114);
-        g_to_Cb[i] = (R * -0.168736 + G * -0.331264 + B * 0.5 + 128);
-        b_to_Cr[i] = (R * 0.5 + G * -0.418688 + B * -0.081312 + 128);
-   }
+    /* Legacy function for 8x8 block - calls slice version */
+    slice_rgb_to_yCbCr(r_to_y, g_to_Cb, b_to_Cr, 64);
 }
+
 void image_yCbCr_to_rgb(uint8_t *y_to_r, uint8_t *Cb_to_g, uint8_t *Cr_to_b)
 {
-    /*
-    Translates yCbCr values to rgb values.
-        * y_to_r: the block containing y values, and output for r.
-        * Cb_to_g: the block containing Cb values, and output for g.
-        * Cr_to_b: the block containing Cr values, and output for b.
-    */
-   int i;
-   uint8_t Y, Cb, Cr;
-   for (i = 0; i < 8 * 8; i++) {
-        Y = y_to_r[i];
-        Cb = Cb_to_g[i];
-        Cr = Cr_to_b[i];
-        y_to_r[i] = (Y + 1.402 * (Cr - 128));
-        Cb_to_g[i] = (Y - 0.344136 * (Cb - 128) - 0.714136 * (Cr - 128));
-        Cr_to_b[i] = (Y + 1.772 * (Cb - 128));
-   }
+    /* Legacy function for 8x8 block - calls slice version */
+    slice_yCbCr_to_rgb(y_to_r, Cb_to_g, Cr_to_b, 64);
 }
 int encode_slice(OUTSTREAM *out, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT, bool is_luminance) {
     int I, J;
@@ -90,11 +111,17 @@ int encode_slice(OUTSTREAM *out, uint8_t *slice, uint16_t WIDTH, uint16_t HEIGHT
 }
 int encode_image(char *filename, uint8_t *r, uint8_t *g, uint8_t *b,  uint16_t width, uint16_t height) {
     OUTSTREAM *out = new_OUTSTREAM(filename, 8);
+    if (!out) {
+        printf("Error: could not create output stream\n");
+        return -1;
+    }
     OUTSTREAM_push(out, width, 16); OUTSTREAM_push(out, height, 16);
-    image_rgb_to_yCbCr(r, g, b);
-    downsample_420(g, b, width * height);
+    
+    size_t num_pixels = (size_t)width * (size_t)height;
+    slice_rgb_to_yCbCr(r, g, b, num_pixels);
+    downsample_420(g, b, num_pixels);
+    
     // r = y, g = Cb, b = Cr
-    // downsample
     encode_slice(out, r, width, height, true);
     encode_slice(out, g, width, height, false);
     encode_slice(out, b, width, height, false);
@@ -136,16 +163,31 @@ int decode_image(char *filename, uint8_t **r, uint8_t **g, uint8_t **b, uint16_t
     }
     
     INSTREAM *in = new_INSTREAM(filename, 8);
+    if (!in) {
+        printf("Error: could not open file\n");
+        return -1;
+    }
     INSTREAM_pull(in, width, 16); INSTREAM_pull(in, height, 16);
 
-    *r = malloc(sizeof(uint8_t) * (*width) * (*height));
-    *g = malloc(sizeof(uint8_t) * (*width) * (*height));
-    *b = malloc(sizeof(uint8_t) * (*width) * (*height));
+    size_t num_pixels = (size_t)(*width) * (size_t)(*height);
+    *r = malloc(sizeof(uint8_t) * num_pixels);
+    *g = malloc(sizeof(uint8_t) * num_pixels);
+    *b = malloc(sizeof(uint8_t) * num_pixels);
 
-    decode_slice(in, *r, *width, *height, true);
-    decode_slice(in, *g, *width, *height, false);
-    decode_slice(in, *b, *width, *height, false);
-    image_yCbCr_to_rgb(*r, *g, *b);
+    if (decode_slice(in, *r, *width, *height, true) != 0) {
+        delete_INSTREAM(in);
+        return -1;
+    }
+    if (decode_slice(in, *g, *width, *height, false) != 0) {
+        delete_INSTREAM(in);
+        return -1;
+    }
+    if (decode_slice(in, *b, *width, *height, false) != 0) {
+        delete_INSTREAM(in);
+        return -1;
+    }
+    
+    slice_yCbCr_to_rgb(*r, *g, *b, num_pixels);
     delete_INSTREAM(in);
     return 0;
 }
