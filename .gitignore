@@ -4,7 +4,6 @@
 *.out
 *.a
 *.bin
-*.txt
 
 # Build directories
 build/
@@ -36,3 +35,6 @@ __pycache__/
 
 # Temporary files
 tempCodeRunnerFile.c
+
+# CodeQL
+_codeql_detected_source_root
