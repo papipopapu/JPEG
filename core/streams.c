@@ -78,24 +78,44 @@ int INSTREAM_pull(INSTREAM *in, uint16_t *data, int bits) { // pointer to uint, 
 OUTSTREAM *new_OUTSTREAM(const char* filename, int buffer_bytes) {
     if (buffer_bytes < 1) return NULL;
     OUTSTREAM *out = malloc(sizeof(OUTSTREAM));
+    if (!out) return NULL;
     out->filename = filename;
     out->file = fopen(filename, "wb");
+    if (!out->file) {
+        free(out);
+        return NULL;
+    }
     out->written_bits = 0;
+    out->written_bytes = 0;
     out->buffer_bytes = buffer_bytes;
-    out->buffer = calloc(buffer_bytes, 1); 
-    //if (fread(out->buffer, 1, buffer_bytes, out->file)==0) {fclose(out->file); free(out); return NULL;}
+    out->buffer = calloc(buffer_bytes, 1);
+    if (!out->buffer) {
+        fclose(out->file);
+        free(out);
+        return NULL;
+    }
     return out;
 }
 INSTREAM *new_INSTREAM(const char* filename, int buffer_bytes) {
     if (buffer_bytes < 1) return NULL;
     INSTREAM *in = malloc(sizeof(INSTREAM));
+    if (!in) return NULL;
     in->filename = filename;
     in->file = fopen(filename, "rb");
+    if (!in->file) {
+        free(in);
+        return NULL;
+    }
     in->read_bits = 0;
     in->read_bytes = 0;
     in->eof = false;
     in->buffer_bytes = buffer_bytes;
-    in->buffer = calloc(buffer_bytes, 1); 
+    in->buffer = calloc(buffer_bytes, 1);
+    if (!in->buffer) {
+        fclose(in->file);
+        free(in);
+        return NULL;
+    }
     in->buffer_bytes = fread(in->buffer, 1, buffer_bytes, in->file);
     if (in->buffer_bytes == 0) {fclose(in->file); free(in->buffer); free(in); return NULL;}
     return in;
