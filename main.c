@@ -28,7 +28,6 @@ int test_basic_encode_decode(void) {
     }
 
     /* Initialize with random values */
-    srand(42);  /* Fixed seed for reproducibility */
     for (int i = 0; i < 64; i++) {
         rout[i] = rand() % 256;
         gout[i] = rand() % 256;
@@ -243,6 +242,9 @@ int test_decode_invalid_file(void) {
 
 int main(void) {
     int failed = 0;
+    
+    /* Fixed seed for reproducibility */
+    srand(42);
     
     printf("JPEG Compression Library Tests\n");
     printf("==============================\n\n");
